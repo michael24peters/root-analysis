@@ -1,0 +1,34 @@
+# Image files
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.tiff
+*.bmp
+
+# figs/ directory
+figs/*
+
+# root files directory
+ntuple/*
+red/*
+*.root
+
+# hist/ directory
+hist/*
+
+# Temporary files
+*.log
+*.tmp
+*.aux
+*.out
+*.toc
+*.pdf
+*.synctex.gz
+
+# out/ directory
+out/*
+
+# old/ directory
+old/*
