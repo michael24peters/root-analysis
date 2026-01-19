@@ -1,14 +1,14 @@
 ################################################################################
+# Step 2 of 4?
 # Methods to apply fiducial requirements and calculate efficiencies.           #
 # Author: Michael Peters                                                       #
 ################################################################################
-# TODO: Split into two files
 # TODO: Might replace offline_gen_cuts.py entirely with this
 
 import ROOT
-import array
 import sys
 import argparse
+from utils.calculate_efficiency import calc_efficiency, calc_sig_efficiency
 
 #===============================================================================
 
@@ -33,6 +33,15 @@ def pseudorapidity(px, py, pz):
 
 
 def passes_reqs(pid, px, py, pz):
+    """Check if a particle with given pid and momentum passes fiducial
+    requirements.
+
+    Fiducial requirements:
+    - Pseudorapidity (eta) in [2, 4.5]
+    - Muon pT > 500 MeV
+    - Muon P > 3 GeV
+    - Photon pT > 500 MeV
+    """
     p = (px**2 + py**2 + pz**2)**0.5  # momentum
     pt = (px**2 + py**2)**0.5  # transverse momentum
     
@@ -54,11 +63,6 @@ def apply_fiducial_reqs(tree):
     """Apply fiducial cuts to generator-level particles.
     
     Returns a new tree with only events that pass the fiducial cuts.
-    Fiducial requirements:
-    - Pseudorapidity (eta) in [2, 4.5]
-    - Muon pT > 500 MeV
-    - Muon P > 3 GeV
-    - Photon pT > 500 MeV
     """
 
     new_tree = tree.CloneTree(0)
@@ -102,89 +106,6 @@ def apply_fiducial_reqs(tree):
 
 #===============================================================================
 
-
-def calc_efficiency(tree):
-    """Calculate efficiency with fiducial requirements in place."""
-    nreco, ngen = 0, 0
-    # Loop through tree, count number of reconstructed candidates and number of
-    # generator level candidates.
-    for entryIdx in range(0, tree.GetEntries()):
-        tree.GetEntry(entryIdx)
-        
-        tag_pid = getattr(tree, 'tag_pid')
-        mc_pid = getattr(tree, 'mc_pid')
-
-        tag_pid = [int(pid) for pid in tag_pid]
-        mc_pid = [int(pid) for pid in mc_pid]
-        
-        # Loop over mc_pid and count candidates
-        nreco += 1 if len(tag_pid) > 0 else 0
-        # Each generator level candidate has 4 particles, and all the junk has
-        # already been thrown out, so we can just divide by 4.
-        ngen += len(mc_pid) // 4
-
-    return nreco / ngen if ngen > 0 else 0.0
-
-
-#===============================================================================
-
-
-def calc_sig_efficiency(tree):
-    """Calculate signal efficiency with fiducial requirements in place."""
-    nreco_matches, ngen = 0, 0
-    # Loop through tree, count number of reconstructed decays which match to
-    # generator level decays and count number of generator level decays.
-    for entryIdx in range(0, tree.GetEntries()):
-        tree.GetEntry(entryIdx)
-        
-        tag_pid = getattr(tree, 'tag_pid')
-        prt_pid = getattr(tree, 'prt_pid')
-        prt_idx_gen = getattr(tree, 'prt_idx_gen')
-        mc_pid = getattr(tree, 'mc_pid')
-        mc_idx_mom = getattr(tree, 'mc_idx_mom')
-
-        tag_pid = [int(pid) for pid in tag_pid]
-        prt_pid = [int(pid) for pid in prt_pid]
-        prt_idx_gen = [int(idx) for idx in prt_idx_gen]
-        mc_pid = [int(pid) for pid in mc_pid]
-        mc_idx_mom = [int(idx) for idx in mc_idx_mom]
-        
-        # Loop through prt_pid and check if each prt_idx_gen points to a matching
-        # mc_pid which is part of a signal decay. If all 3 reconstructed daughters
-        # match to generator level daughters from the same signal decay, count
-        # this as a reconstructed signal decay matching to generator level.
-        ngen += len(mc_pid) // 4
-        for i in range(0, len(prt_pid), 3):
-            pids = prt_pid[i:i + 3]
-            if len(pids) < 3: continue
-            if pids[0] != -13 or pids[1] != 13 or pids[2] != 22: continue
-            # This is a reco signal candidate, check if all daughters match to
-            # generator level signal daughters.
-            passed = True
-            for j in range(1, 3):
-                gen_idx = prt_idx_gen[i + j]
-                if gen_idx < 0 or gen_idx >= len(mc_pid):
-                    passed = False
-                    break
-                mcp = mc_pid[gen_idx]
-                mcp_mom_idx = mc_idx_mom[gen_idx]
-                if mcp_mom_idx == -1:
-                    passed = False
-                    break
-                mc_mom_pid = mc_pid[mcp_mom_idx]
-                if not (mc_mom_pid == 221 and 
-                        ((pids[j] == -13 and mcp == -13) or
-                         (pids[j] == 13 and mcp == 13) or
-                         (pids[j] == 22 and mcp == 22))):
-                    passed = False
-                    break
-            if passed: nreco_matches += 1
-
-    return nreco_matches / ngen if ngen > 0 else 0.0
-
-
-#===============================================================================
-
 parser = argparse.ArgumentParser()
 parser.add_argument(
     '-o', '--outfile',
@@ -202,6 +123,7 @@ sig_file = args.sig
 if 'sig' in sys.argv[1:]:
     sig_file = True
 
+# Default input and output files
 if sig_file:
     infile = 'MC_2018_Signal/eta2MuMuGamma_mc_20251121.root'
     def_outfile = 'root/sig_reduced_fiducial_reqs.root'
@@ -209,6 +131,7 @@ else:
     infile = 'red/reduced.root'
     def_outfile = 'red/reduced_fiducial_reqs.root'
 
+# Output file name
 outfile = ('red' + args.outfile) if args.outfile else def_outfile
 print(f'Reading from {infile}, writing to {outfile}.')
 
@@ -218,11 +141,10 @@ tree = tfile.Get('tree')
 new_tfile = ROOT.TFile.Open(outfile, "RECREATE")
 new_tfile.cd()
 
+# Apply fiducial requirements
 new_tree = apply_fiducial_reqs(tree)
 
 print(f'Total kept entries: {new_tree.GetEntries()}')
-eff = calc_efficiency(new_tree)
-sig_eff = calc_sig_efficiency(new_tree)
 
 # Close input file
 tfile.Close()
@@ -232,6 +154,10 @@ new_tree.Write()
 new_tfile.Close()
 
 print(f'Done: wrote reduced tree with fiducial requirements to {outfile}.')
+
+# Calculate efficiencies with fiducial requirements in place
+eff = calc_efficiency(new_tree)
+sig_eff = calc_sig_efficiency(new_tree)
 
 print(f'Efficiency with fiducial requirements: {eff:.6f}')
 print(f'Signal efficiency with fiducial requirements: {sig_eff:.6f}')

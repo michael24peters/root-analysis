@@ -1,7 +1,7 @@
-###############################################################################
-# Script to analyze background.                                               #
-# Author: Michael Peters                                                      #
-###############################################################################
+################################################################################
+# Script to analyze background.                                                #
+# Author: Michael Peters                                                       #
+################################################################################
 
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ import argparse
 from dataclasses import dataclass
 from enum import Enum
 from collections import Counter
+from utils.calculate_efficiency import calc_ratio, calc_sig_ratio
+from utils.calculate_efficiency import calc_efficiency, calc_sig_efficiency
 
 # Parse command line arguments
 parser = argparse.ArgumentParser()
@@ -17,22 +19,25 @@ parser.add_argument('-v', '--verbose', action='store_true',
                     help='Enable verbose output')
 parser.add_argument('-s', '--sig', action='store_true',
                     help='Analyze signal file instead of minbias file')
+parser.add_argument('-o', '--outfile', action='store_true',
+                    help='Write to output text file (default: none)')
 args = parser.parse_args()
 
 verbose = args.verbose
-sig_file = args.sig
+is_sig_file = args.sig
+write_to_outfile = args.outfile
 
-if sig_file:
+if is_sig_file:
     infile = 'MC_2018_Signal/eta2MuMuGamma_mc_20251208.root'
-    outfile = 'hist/sig_hist_m.root'
 else:
     # infile = 'red/reduced.root'
-    infile = 'red/reduced_fiducial_cuts.root'
-    # outfile = 'hist/TODO.root'
+    # infile = 'red/reduced_fiducial_cuts.root'
+    infile = 'red/reduced_fiducial_reqs.root'
 
-print(f'Reading from {infile}.')
+if write_to_outfile: print(f'Reading from {infile}, writing to out/bkg_ana.txt.')
+else: print(f'Reading from {infile}.')
 
-# Possible erregories for a decay candidate
+# Possible error categories for a decay candidate
 class ErrorType(str, Enum):
     MUP_PID_MISMATCH = 'MUP_PID_MISMATCH'
     MUM_PID_MISMATCH = 'MUM_PID_MISMATCH'
@@ -85,8 +90,6 @@ for entryIdx in range(0, tree.GetEntries()):
     # Generator particle information
     mc_pid = getattr(tree, 'mc_pid')
     mc_idx_mom = getattr(tree, 'mc_idx_mom')
-    # Passed LHCb fiducial cuts
-    mc_req_pass = getattr(tree, 'mc_req_pass')
 
     # Reformat above lists for easier handling
     prt_pid = [int(pid) for pid in prt_pid]
@@ -94,7 +97,6 @@ for entryIdx in range(0, tree.GetEntries()):
     prt_idx_mom = [int(idx) for idx in prt_idx_mom]
     mc_pid = [int(pid) for pid in mc_pid]
     mc_idx_mom = [int(idx) for idx in mc_idx_mom]
-    mc_req_pass = [int(val) for val in mc_req_pass]
 
     # Skip empty events
     ntags = len(tag_pid)
@@ -183,10 +185,6 @@ for entryIdx in range(0, tree.GetEntries()):
                     err_type=err_type))
                 print('Warning: Could not assign mc_pid or mc_idx_mom for daughter.')
 
-            # Fiducial requirements fail condition
-            if mc_req_pass[prt_idx_gen[j]] == 0:
-                pass  # TODO
-
         if is_signal: nsig += 1
         else: nbkg += 1
         candidate = Candidate(evt=entryIdx,
@@ -209,7 +207,7 @@ for can in candidates:
             if dtr.err_type == err:
                 err_counters[err] += 1
 
-#------------------------------------------------------------------------------#
+#-------------------------------------------------------------------------------
 
 
 def format_pid_freq_table(rows: list[tuple[int, int]]) -> str:
@@ -230,11 +228,10 @@ def format_pid_freq_table(rows: list[tuple[int, int]]) -> str:
     return out
 
 
-#------------------------------------------------------------------------------#
+#-------------------------------------------------------------------------------
 
-# Print analytics
-with open('out/bkg_ana.txt', 'w') as f:
-    f.write('') # Clear file contents
+
+def get_analytics():
     output = '='*25 + ' Background Analysis Results ' + '='*26 + '\n'
     # Key to explain counters
     output += '*_MISMATCH: Daughter has MC match but reco pid does not match gen pid.\n'
@@ -272,22 +269,46 @@ with open('out/bkg_ana.txt', 'w') as f:
 
     output += '\n--- OTHER ---\n'
     output += format_pid_freq_table(c_other.most_common())
+    output += '-'*80 + '\n'
+
+    # Calculate efficiencies with fiducial requirements in place
+    eff_ratio = calc_ratio(tree)
+    sig_eff_ratio = calc_sig_ratio(tree)
+    eff = calc_efficiency(tree)
+    sig_eff = calc_sig_efficiency(tree)
+
+    output += f'Efficiency with fiducial requirements: {eff_ratio[0]}/{eff_ratio[1]} = {eff:.4f}\n'
+    output += f'Signal efficiency with fiducial requirements: {sig_eff_ratio[0]}/{sig_eff_ratio[1]} = {sig_eff:.4f}\n'
+    output += '-'*80 + '\n'
     
-    print(output)
-
     # Verbose output
+    verbose_output = ''
     if verbose:
-        output += '-'*80 + '\n'
-        output += 'Verbose candidate information:\n'
+        verbose_output += 'Verbose candidate information:\n'
         for can in candidates:
-            output += f'\nEvent {can.evt}, Candidate {can.can_idx}:\n'
+            verbose_output += f'\nEvent {can.evt}, Candidate {can.can_idx}:\n'
             for dtr in can.dtrs:
-                output += f'  Daughter PID {dtr.prt_pid:3d}, '
-                output += f'Gen idx {dtr.prt_idx_gen:2d}, '
-                output += f'MC PID {dtr.mc_pid:5d}, '
-                output += f'MC mom idx {dtr.mc_idx_mom:2d}, '
-                output += f'Error type: {dtr.err_type}\n'
-        print(f'Verbose candidate information written to {f.name} file.')
+                verbose_output += f'  Daughter PID {dtr.prt_pid:3d}, '
+                verbose_output += f'Gen idx {dtr.prt_idx_gen:2d}, '
+                verbose_output += f'MC PID {dtr.mc_pid:5d}, '
+                verbose_output += f'MC mom idx {dtr.mc_idx_mom:2d}, '
+                verbose_output += f'Error type: {dtr.err_type}\n'
 
-    # Final output
-    f.write(output)
+    return output, verbose_output
+
+
+#-------------------------------------------------------------------------------
+
+# Print or write analytics to file
+output, verbose_output = get_analytics()
+print(output)
+if write_to_outfile:
+    with open('out/bkg_ana.txt', 'w') as f:
+        f.write('') # Clear file contents
+        f.write(output)
+        if verbose:
+            f.write('\n' + verbose_output)
+    print('Background analysis results written to out/bkg_ana.txt file.')
+elif verbose: 
+    print('Verbose output not written. Use -o flag to write to file.')
+    print('-' * 80)
