@@ -125,8 +125,8 @@ if 'sig' in sys.argv[1:]:
 
 # Default input and output files
 if sig_file:
-    infile = 'MC_2018_Signal/eta2MuMuGamma_mc_20251121.root'
-    def_outfile = 'root/sig_reduced_fiducial_reqs.root'
+    infile = 'ntuple/MC_2018_Signal/probnnmu_95_20260120.root'
+    def_outfile = 'ntuple/MC_2018_Signal/fid_probnnmu_95_20260120.root'
 else:
     infile = 'red/reduced.root'
     def_outfile = 'red/reduced_fiducial_reqs.root'
@@ -149,15 +149,14 @@ print(f'Total kept entries: {new_tree.GetEntries()}')
 # Close input file
 tfile.Close()
 
+# Calculate efficiencies with fiducial requirements in place
+eff = calc_efficiency(new_tree)
+sig_eff = calc_sig_efficiency(new_tree)
+
 # Write new tree to output file 
 new_tree.Write()
 new_tfile.Close()
 
 print(f'Done: wrote reduced tree with fiducial requirements to {outfile}.')
-
-# Calculate efficiencies with fiducial requirements in place
-eff = calc_efficiency(new_tree)
-sig_eff = calc_sig_efficiency(new_tree)
-
 print(f'Efficiency with fiducial requirements: {eff:.6f}')
 print(f'Signal efficiency with fiducial requirements: {sig_eff:.6f}')

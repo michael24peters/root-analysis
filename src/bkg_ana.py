@@ -28,7 +28,7 @@ is_sig_file = args.sig
 write_to_outfile = args.outfile
 
 if is_sig_file:
-    infile = 'MC_2018_Signal/eta2MuMuGamma_mc_20251208.root'
+    infile = 'ntuple/MC_2018_Signal/fid_probnnmu_95_20260120.root'
 else:
     # infile = 'red/reduced.root'
     # infile = 'red/reduced_fiducial_cuts.root'
@@ -40,11 +40,15 @@ else: print(f'Reading from {infile}.')
 # Possible error categories for a decay candidate
 class ErrorType(str, Enum):
     MUP_PID_MISMATCH = 'MUP_PID_MISMATCH'
+    MUP_ONLY_PID_MISMATCH = 'MUP_ONLY_PID_MISMATCH'
     MUM_PID_MISMATCH = 'MUM_PID_MISMATCH'
+    MUM_ONLY_PID_MISMATCH = 'MUM_ONLY_PID_MISMATCH'
     DIMUON_PID_MISMATCH = 'DIMUON_PID_MISMATCH'
     PHOTON_PID_MISMATCH = 'PHOTON_PID_MISMATCH'
     MUP_ERROR = 'MUP_ERROR'
+    MUP_ONLY_ERROR = 'MUP_ONLY_ERROR'
     MUM_ERROR = 'MUM_ERROR'
+    MUM_ONLY_ERROR = 'MUM_ONLY_ERROR'
     DIMUON_ERROR = 'DIMUON_ERROR'
     PHOTON_ERROR = 'PHOTON_ERROR'
     OTHER_ERROR = 'OTHER_ERROR'
@@ -197,15 +201,33 @@ for entryIdx in range(0, tree.GetEntries()):
 # Collect analytics
 ERROR_TYPES = list(ErrorType)
 err_counters = {err: 0 for err in ERROR_TYPES}
+mup_err_only_count, mum_err_only_count = 0, 0
+mu_AND_dimu_err_count = 0
 for can in candidates:
     # Dimuon errors can only be observed at candidate-level
-    if can.has_dimu_mismatch: err_counters[ErrorType.DIMUON_PID_MISMATCH] += 1
-    if can.has_dimu_err: err_counters[ErrorType.DIMUON_ERROR] += 1
+    if can.has_dimu_mismatch: 
+        err_counters[ErrorType.DIMUON_PID_MISMATCH] += 1
+    if can.has_dimu_err: 
+        err_counters[ErrorType.DIMUON_ERROR] += 1
     for dtr in can.dtrs:
         # Increment daughter counters
         for err in ERROR_TYPES:
             if dtr.err_type == err:
                 err_counters[err] += 1
+                if err == ErrorType.MUP_PID_MISMATCH and not can.has_dimu_mismatch:
+                    mup_err_only_count += 1
+                elif err == ErrorType.MUM_PID_MISMATCH and not can.has_dimu_mismatch:
+                    mum_err_only_count += 1
+                elif err == ErrorType.MUP_ERROR and not can.has_dimu_err:
+                    mu_AND_dimu_err_count += 1
+                elif err == ErrorType.MUM_ERROR and not can.has_dimu_err:
+                    mu_AND_dimu_err_count += 1
+
+# Add MUON_ONLY_* counters
+err_counters[ErrorType.MUP_ONLY_PID_MISMATCH] = mup_err_only_count
+err_counters[ErrorType.MUM_ONLY_PID_MISMATCH] = mum_err_only_count
+err_counters[ErrorType.MUP_ONLY_ERROR] = mup_err_only_count
+err_counters[ErrorType.MUM_ONLY_ERROR] = mum_err_only_count
 
 #-------------------------------------------------------------------------------
 
@@ -239,15 +261,32 @@ def get_analytics():
     output += 'Note: DIMUON_* errors do not overwrite single MU*_* errors.\n'
     output += '-'*80 + '\n'
     # Summary statistics
-    output += f'Total candidates processed: {ncan}\n'
-    output += f'Total signal candidates: {nsig}\n'
-    output += f'Total background candidates: {nbkg}\n'
+    output += f'Total candidates processed:  {ncan:4d}\n'
+    output += f'Total signal candidates:     {nsig:4d}\n'
+    output += f'Total background candidates: {nbkg:4d}\n'
     output += '-'*80 + '\n'
     # Error counts
     output += 'Background error counts:\n'
     for err in err_counters:
         # Remove ErrorType. prefix for display
-        output += f'- {err.strip("ErrorType.")}: {err_counters[err]}\n'
+        label = str(err).strip('ErrorType.') + ':'
+        output += f'- {label:<26} {err_counters[err]:4d}\n'
+    output += '-'*80 + '\n'
+    # Error rates
+    output += 'Background error rates:\n'
+    # P(dimuon error | muon error) = N(muon & dimuon) / N(muon)
+    prob_dimu_given_mu = err_counters[ErrorType.DIMUON_ERROR] / \
+                         max(err_counters[ErrorType.MUP_ERROR], 
+                         err_counters[ErrorType.MUM_ERROR], 1)
+    # P(muon error)
+    prob_mu = (err_counters[ErrorType.MUP_ERROR] / ncan,
+               err_counters[ErrorType.MUM_ERROR] / ncan)
+    # P(photon error)
+    prob_pho = err_counters[ErrorType.PHOTON_ERROR] / ncan
+    output += f'- P(dimuon error | muon error) = {prob_dimu_given_mu:.4f}\n'
+    output += f'- P(mu+ error)                 = {prob_mu[0]:.4f}\n'
+    output += f'- P(mu- error)                 = {prob_mu[1]:.4f}\n'
+    output += f'- P(photon error)              = {prob_pho:.4f}\n'
     output += '-'*80 + '\n'
     # List of MC pids causing mismatches
     output += 'List of PID mismatches (ranked by frequency):\n'
@@ -288,7 +327,7 @@ def get_analytics():
         for can in candidates:
             verbose_output += f'\nEvent {can.evt}, Candidate {can.can_idx}:\n'
             for dtr in can.dtrs:
-                verbose_output += f'  Daughter PID {dtr.prt_pid:3d}, '
+                verbose_output += f'- Daughter PID {dtr.prt_pid:3d}, '
                 verbose_output += f'Gen idx {dtr.prt_idx_gen:2d}, '
                 verbose_output += f'MC PID {dtr.mc_pid:5d}, '
                 verbose_output += f'MC mom idx {dtr.mc_idx_mom:2d}, '
