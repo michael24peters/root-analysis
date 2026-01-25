@@ -15,24 +15,18 @@ from utils.calculate_efficiency import calc_efficiency, calc_sig_efficiency
 
 # Parse command line arguments
 parser = argparse.ArgumentParser()
+parser.add_argument('-i', '--infile',
+                    help = 'Input ROOT file')
 parser.add_argument('-v', '--verbose', action='store_true', 
                     help='Enable verbose output')
-parser.add_argument('-s', '--sig', action='store_true',
-                    help='Analyze signal file instead of minbias file')
 parser.add_argument('-o', '--outfile', action='store_true',
-                    help='Write to output text file (default: none)')
+                    help='Write output to a text file')
 args = parser.parse_args()
 
+try: infile = args.infile
+except: raise ValueError('Input file must be specified with -i flag.')
 verbose = args.verbose
-is_sig_file = args.sig
 write_to_outfile = args.outfile
-
-if is_sig_file:
-    infile = 'ntuple/MC_2018_Signal/fid_probnnmu_95_20260120.root'
-else:
-    # infile = 'red/reduced.root'
-    # infile = 'red/reduced_fiducial_cuts.root'
-    infile = 'red/reduced_fiducial_reqs.root'
 
 if write_to_outfile: print(f'Reading from {infile}, writing to out/bkg_ana.txt.')
 else: print(f'Reading from {infile}.')
@@ -258,7 +252,6 @@ def get_analytics():
     # Key to explain counters
     output += '*_MISMATCH: Daughter has MC match but reco pid does not match gen pid.\n'
     output += '*_ERROR: Daughter has MC match but did reco did not match to candidate gen dtr.\n'
-    output += 'Note: DIMUON_* errors do not overwrite single MU*_* errors.\n'
     output += '-'*80 + '\n'
     # Summary statistics
     output += f'Total candidates processed:  {ncan:4d}\n'

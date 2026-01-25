@@ -1,8 +1,7 @@
-###############################################################################
-# Step 3 of 4                                                                 #
-# Script to make gen-level histograms from ntuple and save to root file.      #
-# Author: Michael Peters                                                      #
-###############################################################################
+################################################################################
+# Script to make gen-level histograms from ntuple and save to root file.       #
+# Author: Michael Peters                                                       #
+################################################################################
 
 import ROOT
 from utils.create_histograms import create_histograms
@@ -11,29 +10,23 @@ import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
-    '-o', '--outfile',
-    help='Output ROOT file'
+    '-i', '--infile',
+    help='Input ROOT file'
 )
 parser.add_argument(
-    '-s', '--sig',
+    '-s', '--signal',
     action='store_true',
     help='Use signal file'
 )
-
 args = parser.parse_args()
 
-sig_file = args.sig
-if 'sig' in sys.argv[1:]:
-    sig_file = True
+infile = args.infile
+# Put outfile in hist/ directory, signal/ if signal file, minbias/ if minbias
+# file, with fixed name
+if infile is not None:
+    if args.signal: outfile = 'hist/signal/hist_gen.root'
+    else: outfile = 'hist/minbias/hist_gen.root'
 
-if sig_file:
-    infile = 'MC_2018_Signal/eta2MuMuGamma_mc_20251121.root'
-    def_outfile = 'hist/sig_hist_gen.root'
-else:
-    infile = 'red/reduced_fiducial_cuts.root'
-    def_outfile = 'hist/hist_gen.root'
-
-outfile = ('hist' + args.outfile) if args.outfile else def_outfile
 print(f'Reading from {infile}, writing to {outfile}.')
 
 # Arrays to hold histogram data

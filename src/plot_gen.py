@@ -1,8 +1,7 @@
-###############################################################################
-# Step 4 of 4                                                                 #
-# Script to make mass plots from histograms and save to png files             #
-# Author: Michael Peters                                                      #
-###############################################################################
+################################################################################
+# Script to make mass plots from histograms and save to png files              #
+# Author: Michael Peters                                                       #
+################################################################################
 
 # consider:
 # pull plot: see example, either do difference / bin error OR ratio
@@ -14,16 +13,14 @@ import sys
 include_stats = False
 sig_file = False
 if len(sys.argv) > 1:
-    if 'stats' in sys.argv[1:]:
-        include_stats = True
-    if 'sig' in sys.argv[1:]:
-        sig_file = True
+    if 'stats' in sys.argv[1:]: include_stats = True
+    if 'signal' in sys.argv[1:]: sig_file = True
 
 if sig_file:
-    infile = 'hist/sig_hist_gen.root'
-    fileheader = 'figs/sig/'
+    infile = 'hist/signal/hist_gen.root'
+    fileheader = 'figs/signal/'
 else: 
-    infile = 'hist/hist_gen.root'
+    infile = 'hist/minbias/hist_gen.root'
     fileheader = 'figs/minbias/'
 
 print(f'Reading from {infile} and writing to {fileheader}*.png')

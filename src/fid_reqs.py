@@ -1,17 +1,14 @@
 ################################################################################
-# Step 2 of 4?
-# Methods to apply fiducial requirements and calculate efficiencies.           #
+# Script to apply fiducial requirements (also calculates efficiencies).        #
 # Author: Michael Peters                                                       #
 ################################################################################
-# TODO: Might replace offline_gen_cuts.py entirely with this
 
 import ROOT
 import sys
 import argparse
 from utils.calculate_efficiency import calc_efficiency, calc_sig_efficiency
 
-#===============================================================================
-
+#-------------------------------------------------------------------------------
 
 def pseudorapidity(px, py, pz):
     """
@@ -28,9 +25,7 @@ def pseudorapidity(px, py, pz):
     elif pz > 0: return 1e10
     else: return -1e10
 
-
-#===============================================================================
-
+#-------------------------------------------------------------------------------
 
 def passes_reqs(pid, px, py, pz):
     """Check if a particle with given pid and momentum passes fiducial
@@ -55,9 +50,7 @@ def passes_reqs(pid, px, py, pz):
     elif pid == 221: return True
     else: return False
 
-
-#===============================================================================
-
+#-------------------------------------------------------------------------------
 
 def apply_fiducial_reqs(tree):
     """Apply fiducial cuts to generator-level particles.
@@ -103,36 +96,20 @@ def apply_fiducial_reqs(tree):
 
     return new_tree
 
-
-#===============================================================================
+#-------------------------------------------------------------------------------
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
-    '-o', '--outfile',
-    help='Output ROOT file'
+    '-i', '--infile',
+    help='Input ROOT file'
 )
-parser.add_argument(
-    '-s', '--sig',
-    action='store_true',
-    help='Use signal file'
-)
-
 args = parser.parse_args()
 
-sig_file = args.sig
-if 'sig' in sys.argv[1:]:
-    sig_file = True
-
-# Default input and output files
-if sig_file:
-    infile = 'ntuple/MC_2018_Signal/probnnmu_95_20260120.root'
-    def_outfile = 'ntuple/MC_2018_Signal/fid_probnnmu_95_20260120.root'
-else:
-    infile = 'red/reduced.root'
-    def_outfile = 'red/reduced_fiducial_reqs.root'
-
+infile = args.infile
+# Put outfile in same directory as infile with fixed name
+if infile is not None:
+    outfile = '/'.join(infile.split('/')[:-1]) + '/fiducial_requirements.root'
 # Output file name
-outfile = ('red' + args.outfile) if args.outfile else def_outfile
 print(f'Reading from {infile}, writing to {outfile}.')
 
 tfile = ROOT.TFile.Open(infile, 'READ')
