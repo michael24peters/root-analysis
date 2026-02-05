@@ -1,23 +1,32 @@
-###############################################################################
-# Step 3 of 4                                                                 #
-# Script to make reconstructed histograms from ntuple and save to root file.  #
-# Author: Michael Peters                                                      #
-###############################################################################
+################################################################################
+# Script to make reconstructed histograms from ntuple and save to root file.   #
+# Author: Michael Peters                                                       #
+################################################################################
 
 import ROOT
 from utils.create_histograms import create_histograms
 import sys
+import argparse
 
-sig_file = False
-if 'sig' in sys.argv[1:]:
-    sig_file = True
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    '-i', '--infile',
+    help='Input ROOT file'
+)
+parser.add_argument(
+    '-s', '--signal',
+    action='store_true',
+    help='Use signal file'
+)
+args = parser.parse_args()
 
-if sig_file:
-    infile = 'MC_2018_Signal/eta2MuMuGamma_mc_20251208.root'
-    outfile = 'hist/sig_hist_rec.root'
-else:
-    infile = 'red/reduced_fiducial_cuts.root'
-    outfile = 'hist/hist_rec.root'
+infile = args.infile
+# Put outfile in hist/ directory, signal/ if signal file, minbias/ if minbias
+# file, with fixed name
+if infile is not None:
+    if args.signal: outfile = 'hist/signal/hist_rec.root'
+    else: outfile = 'hist/minbias/hist_rec.root'
+
 
 print(f'Reading from {infile}, writing to {outfile}:')
 

@@ -10,29 +10,24 @@ import argparse
 from dataclasses import dataclass
 from enum import Enum
 from collections import Counter
-from utils.calculate_efficiency import calc_ratio, calc_sig_ratio
-from utils.calculate_efficiency import calc_efficiency, calc_sig_efficiency
 
 # Parse command line arguments
 parser = argparse.ArgumentParser()
+parser.add_argument('-i', '--infile',
+                    help = 'Input ROOT file')
 parser.add_argument('-v', '--verbose', action='store_true', 
                     help='Enable verbose output')
-parser.add_argument('-s', '--sig', action='store_true',
-                    help='Analyze signal file instead of minbias file')
 parser.add_argument('-o', '--outfile', action='store_true',
-                    help='Write to output text file (default: none)')
+                    help='Write output to a text file')
+parser.add_argument('--pnnmu_cut', type=float, default=None,
+                    help='PROBNNmu cut value applied to input file')
 args = parser.parse_args()
 
+try: infile = args.infile
+except: raise ValueError('Input file must be specified with -i flag.')
 verbose = args.verbose
-is_sig_file = args.sig
 write_to_outfile = args.outfile
-
-if is_sig_file:
-    infile = 'ntuple/MC_2018_Signal/fid_probnnmu_95_20260120.root'
-else:
-    # infile = 'red/reduced.root'
-    # infile = 'red/reduced_fiducial_cuts.root'
-    infile = 'red/reduced_fiducial_reqs.root'
+pnnmu_cut = args.pnnmu_cut
 
 if write_to_outfile: print(f'Reading from {infile}, writing to out/bkg_ana.txt.')
 else: print(f'Reading from {infile}.')
@@ -94,6 +89,8 @@ for entryIdx in range(0, tree.GetEntries()):
     # Generator particle information
     mc_pid = getattr(tree, 'mc_pid')
     mc_idx_mom = getattr(tree, 'mc_idx_mom')
+    # PROBNNmu branch
+    probnn_mu = getattr(tree, 'prt_pnn_mu')
 
     # Reformat above lists for easier handling
     prt_pid = [int(pid) for pid in prt_pid]
@@ -105,10 +102,20 @@ for entryIdx in range(0, tree.GetEntries()):
     # Skip empty events
     ntags = len(tag_pid)
     if ntags == 0: continue
-    ncan += ntags
     
     for i in range(ntags):
         if tag_pid[i] != 221: continue  # skip failed reco/non-eta candidates
+
+        # Apply PROBNNmu cut if specified
+        if pnnmu_cut is not None:
+            passed = True
+            for j in range(i*3, i*3+3):
+                if abs(prt_pid[j]) == 13 and probnn_mu[j] < pnnmu_cut:
+                    passed = False
+                    break
+            # If candidate fails probnn_mu cut, skip it.
+            if not passed: continue
+        ncan += 1  # Count candidate only after passing pnnmu cut
 
         is_signal = True
         dtrs: list[DaughterMatch] = []
@@ -253,12 +260,11 @@ def format_pid_freq_table(rows: list[tuple[int, int]]) -> str:
 #-------------------------------------------------------------------------------
 
 
-def get_analytics():
+def get_analytics(verbose=False):
     output = '='*25 + ' Background Analysis Results ' + '='*26 + '\n'
     # Key to explain counters
     output += '*_MISMATCH: Daughter has MC match but reco pid does not match gen pid.\n'
     output += '*_ERROR: Daughter has MC match but did reco did not match to candidate gen dtr.\n'
-    output += 'Note: DIMUON_* errors do not overwrite single MU*_* errors.\n'
     output += '-'*80 + '\n'
     # Summary statistics
     output += f'Total candidates processed:  {ncan:4d}\n'
@@ -309,16 +315,6 @@ def get_analytics():
     output += '\n--- OTHER ---\n'
     output += format_pid_freq_table(c_other.most_common())
     output += '-'*80 + '\n'
-
-    # Calculate efficiencies with fiducial requirements in place
-    eff_ratio = calc_ratio(tree)
-    sig_eff_ratio = calc_sig_ratio(tree)
-    eff = calc_efficiency(tree)
-    sig_eff = calc_sig_efficiency(tree)
-
-    output += f'Efficiency with fiducial requirements: {eff_ratio[0]}/{eff_ratio[1]} = {eff:.4f}\n'
-    output += f'Signal efficiency with fiducial requirements: {sig_eff_ratio[0]}/{sig_eff_ratio[1]} = {sig_eff:.4f}\n'
-    output += '-'*80 + '\n'
     
     # Verbose output
     verbose_output = ''
@@ -339,14 +335,13 @@ def get_analytics():
 #-------------------------------------------------------------------------------
 
 # Print or write analytics to file
-output, verbose_output = get_analytics()
+output, verbose_output = get_analytics(verbose=verbose)
 print(output)
 if write_to_outfile:
     with open('out/bkg_ana.txt', 'w') as f:
         f.write('') # Clear file contents
         f.write(output)
-        if verbose:
-            f.write('\n' + verbose_output)
+        f.write('\n' + verbose_output)
     print('Background analysis results written to out/bkg_ana.txt file.')
 elif verbose: 
     print('Verbose output not written. Use -o flag to write to file.')

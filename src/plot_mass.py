@@ -1,8 +1,7 @@
-###############################################################################
-# Step 4 of 4                                                                 #
-# Script to make mass plots from histograms and save to png files             #
-# Author: Michael Peters                                                      #
-###############################################################################
+################################################################################
+# Script to make mass plots from histograms and save to png files              #
+# Author: Michael Peters                                                       #
+################################################################################
 # TODO: consider pull plot. See tutorial; either do difference / bin error OR 
 # ratio.
 
@@ -11,23 +10,17 @@ import sys
 
 # Optional command line arguments: include legend, include stats box.
 # By default, no legend or stats box.
-include_legend = False
-include_stats = False
-sig_file = False
+include_legend, include_stats, sig_file = False, False, False
 if len(sys.argv) > 1:
-    if 'legend' in sys.argv[1:]:
-        include_legend = True
-    if 'stats' in sys.argv[1:]:
-        include_stats = True
-    if 'sig' in sys.argv[1:]:
-        sig_file = True
-
+    if 'legend' in sys.argv[1:]: include_legend = True
+    if 'stats' in sys.argv[1:]: include_stats = True
+    if 'signal' in sys.argv[1:]: sig_file = True
 if sig_file:
-    infile = 'hist/sig_hist_m.root'
-    fileheader = 'figs/sig/tag_m'
+    infile = 'hist/signal/hist_mass.root'
+    fileheader = 'figs/signal/tag_mass'
 else:
-    infile = 'hist/hist_m.root'
-    fileheader = 'figs/minbias/tag_m'
+    infile = 'hist/minbias/hist_mass.root'
+    fileheader = 'figs/minbias/tag_mass'
 
 print(f'Reading from {infile} and writing to {fileheader}_*.png')
 

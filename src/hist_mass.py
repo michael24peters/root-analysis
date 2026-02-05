@@ -1,8 +1,7 @@
-###############################################################################
-# Step 3 of 4                                                                 #
-# Script to make mass histograms from reduced ntuple and save to root file.   #
-# Author: Michael Peters                                                      #
-###############################################################################
+################################################################################
+# Script to make mass histograms from reduced ntuple and save to root file.    #
+# Author: Michael Peters                                                       #
+################################################################################
 '''
 - Inside one event, we want to make sure prt_idx_mom == 0 for all daughters.
 - Then we want to make sure prt_idx_gen points to the correct MC pids:
@@ -17,18 +16,26 @@
 
 import ROOT
 from utils.create_histograms import create_histograms
-import sys
+import argparse
 
-sig_file = False
-if 'sig' in sys.argv[1:]: sig_file = True
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    '-i', '--infile',
+    help='Input ROOT file'
+)
+parser.add_argument(
+    '-s', '--signal',
+    action='store_true',
+    help='Use signal file'
+)
+args = parser.parse_args()
 
-if sig_file:
-    infile = 'MC_2018_Signal/eta2MuMuGamma_mc_20251208.root'
-    outfile = 'hist/sig_hist_m.root'
-else:
-    # infile = 'red/reduced.root'
-    infile = 'red/reduced_fiducial_cuts.root'
-    outfile = 'hist/hist_m.root'
+infile = args.infile
+# Put outfile in hist/ directory, signal/ if signal file, minbias/ if minbias
+# file, with fixed name
+if infile is not None:
+    if args.signal: outfile = 'hist/signal/hist_mass.root'
+    else: outfile = 'hist/minbias/hist_mass.root'
 
 print(f'Reading from {infile}, writing to {outfile}.')
 
