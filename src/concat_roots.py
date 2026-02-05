@@ -7,8 +7,8 @@ import ROOT
 import os
 
 # User-inputted path to nested search ROOT files to concatenate
-print('Provide the base path containing the ROOT files to concatenate.' + 
-      'The base path must contain magup and magdown subdirectories.')
+print('Provide the base path containing the ROOT files to concatenate.')
+print('The base path must contain magup and magdown subdirectories.')
 print('Example: ntuple/mc_minbias_20260124/')
 input_path = input('Path: ').strip()
 if not input_path.endswith('/'): input_path += '/'
