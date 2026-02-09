@@ -1,8 +1,5 @@
 import subprocess
 import argparse
-from pathlib import Path
-import re
-
 parser = argparse.ArgumentParser()
 parser.add_argument(
     '-i', '--infile',
@@ -12,55 +9,10 @@ parser.add_argument(
     '-o', '--outfile',
     help='Output text file'
 )
-parser.add_argument(
-    '-d', '--dir',
-    help='Directory with text outputs to parse'
-)
 args = parser.parse_args()
 
 infile = args.infile
 outfile = args.outfile
-indir = args.dir
-
-if indir:
-    indir_path = Path(indir)
-    if not indir_path.is_dir():
-        raise ValueError(f'Input directory not found: {indir}')
-
-    txt_files = sorted(indir_path.glob('*.txt'))
-    if not txt_files:
-        raise ValueError(f'No .txt files found in directory: {indir}')
-
-    candidates_re = re.compile(r'^Total candidates processed:\s*(\d+)\s*$')
-    signal_re = re.compile(r'^Total signal candidates:\s*(\d+)\s*$')
-
-    results = {}
-    for txt_file in txt_files:
-        candidates = None
-        signal = None
-        with txt_file.open('r', encoding='utf-8') as handle:
-            for line in handle:
-                line = line.strip()
-                if candidates is None:
-                    match = candidates_re.match(line)
-                    if match:
-                        candidates = int(match.group(1))
-                        continue
-                if signal is None:
-                    match = signal_re.match(line)
-                    if match:
-                        signal = int(match.group(1))
-                        continue
-
-        results[txt_file.name] = {
-            'candidates': candidates,
-            'signal': signal,
-        }
-
-    print('Parsed candidate/signal counts:')
-    for name, counts in results.items():
-        print(f'{name}: candidates={counts["candidates"]}, signal={counts["signal"]}')
-    raise SystemExit(0)
 
 PY = ["lb-conda", "default", "python3"]
 
