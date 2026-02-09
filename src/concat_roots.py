@@ -1,6 +1,7 @@
 ################################################################################
 # Script to concatenate multiple ROOT files into a single ROOT file.           #
 # Author: Michael Peters                                                       #
+# To run: run src/concat_roots.py from anaroot/ directory.                     #
 ################################################################################
 
 import ROOT
