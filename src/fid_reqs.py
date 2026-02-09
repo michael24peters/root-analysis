@@ -6,7 +6,6 @@
 import ROOT
 import sys
 import argparse
-from utils.calculate_efficiency import calc_efficiency, calc_sig_efficiency
 
 #-------------------------------------------------------------------------------
 
@@ -52,7 +51,7 @@ def passes_reqs(pid, px, py, pz):
 
 #-------------------------------------------------------------------------------
 
-def apply_fiducial_reqs(tree):
+def apply_fiducial_reqs(tree, gamma_flag):
     """Apply fiducial cuts to generator-level particles.
     
     Returns a new tree with only events that pass the fiducial cuts.
@@ -60,7 +59,7 @@ def apply_fiducial_reqs(tree):
 
     new_tree = tree.CloneTree(0)
 
-    print(f'entries: {tree.GetEntries()}')
+    print(f'Entries: {tree.GetEntries()}')
     for entryIdx in range(0, tree.GetEntries()):
         # Print status
         check_interval = 100000
@@ -79,18 +78,35 @@ def apply_fiducial_reqs(tree):
         mc_pid = [int(pid) for pid in mc_pid]
         
         passed = True
-        for i in range(0, len(mc_pid) - 3, 4):
-            pids = mc_pid[i:i + 4]
-            px4 = px[i:i + 4]
-            py4 = py[i:i + 4]
-            pz4 = pz[i:i + 4]
-            if len(pids) < 4: continue
+        # This is not the most elegant way to do this but is straightforward.
+        # eta -> mu+ mu- gamma case
+        if gamma_flag:
+            for i in range(0, len(mc_pid) - 3, 4):
+                pids = mc_pid[i:i + 4]
+                px4 = px[i:i + 4]
+                py4 = py[i:i + 4]
+                pz4 = pz[i:i + 4]
+                if len(pids) < 4: continue
 
-            if pids[0] != 221 or pids[1] != -13 or pids[2] != 13 or pids[3] != 22:
-                continue
+                if pids[0] != 221 or pids[1] != -13 or pids[2] != 13 or pids[3] != 22:
+                    continue
 
-            passed = all(passes_reqs(pids[j], px4[j], py4[j], pz4[j]) 
-                         for j in range(4))
+                passed = all(passes_reqs(pids[j], px4[j], py4[j], pz4[j]) 
+                            for j in range(4))
+        # eta -> mu+ mu- case
+        else:
+            for i in range(0, len(mc_pid) - 2, 3):
+                pids = mc_pid[i:i + 3]
+                px3 = px[i:i + 3]
+                py3 = py[i:i + 3]
+                pz3 = pz[i:i + 3]
+                if len(pids) < 3: continue
+
+                if pids[0] != 221 or pids[1] != -13 or pids[2] != 13:
+                    continue
+
+                passed = all(passes_reqs(pids[j], px3[j], py3[j], pz3[j]) 
+                            for j in range(3))
             
         if passed: new_tree.Fill()
 
@@ -102,6 +118,12 @@ parser = argparse.ArgumentParser()
 parser.add_argument(
     '-i', '--infile',
     help='Input ROOT file'
+)
+# eta -> mu+ mu- (gamma) flag
+parser.add_argument(
+    '-g', '--gamma',
+    action='store_true',
+    help='eta -> mu+ mu- gamma flag'
 )
 args = parser.parse_args()
 
@@ -119,21 +141,15 @@ new_tfile = ROOT.TFile.Open(outfile, "RECREATE")
 new_tfile.cd()
 
 # Apply fiducial requirements
-new_tree = apply_fiducial_reqs(tree)
+new_tree = apply_fiducial_reqs(tree, args.gamma)
 
 print(f'Total kept entries: {new_tree.GetEntries()}')
 
 # Close input file
 tfile.Close()
 
-# Calculate efficiencies with fiducial requirements in place
-eff = calc_efficiency(new_tree)
-sig_eff = calc_sig_efficiency(new_tree)
-
 # Write new tree to output file 
 new_tree.Write()
 new_tfile.Close()
 
 print(f'Done: wrote reduced tree with fiducial requirements to {outfile}.')
-print(f'Efficiency with fiducial requirements: {eff:.6f}')
-print(f'Signal efficiency with fiducial requirements: {sig_eff:.6f}')
