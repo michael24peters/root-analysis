@@ -1,0 +1,3 @@
+- rm -rf ntuple/mc_minbias_v1
+- rm -rf ntuple/mc_minbias_v2
+- sleepy/ is at 12/13 TB!!

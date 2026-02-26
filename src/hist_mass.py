@@ -96,8 +96,12 @@ for entryIdx in range(0, tree.GetEntries()):
         # TODO: This doesn't handle multiple eta candidates (very rare).
         if mc_pid[0] != 221: is_signal = False
         if tag_pid[i] != 221: continue  # skip failed reco/non-eta candidates
+        # Bounds check: skip candidates with incomplete daughter info
+        j0, j1 = i*3, i*3+3
+        if j1 > len(prt_pid) or j1 > len(prt_idx_gen) or j1 > len(prt_idx_mom):
+            continue
         # Loop for each daughters of candidate
-        for j in range(i*3, i*3+3):
+        for j in range(j0, j1):
             if prt_idx_mom[j] != i:  break  # Skip failed reco, shouldn't happen
             
             if prt_idx_gen[j] == -1: is_signal = False  # no MC match
