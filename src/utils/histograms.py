@@ -3,7 +3,7 @@ from array import array
 
 # TODO: Consider only filling histograms and returning array of histograms,
 # instead of writing to file here. This would make the function more flexible.
-def create_histograms(outfile, binwidths, arrays, names):
+def createHistograms(outfile, binwidths, arrays, names):
     '''Create histograms from arrays of data and save to ROOT TFile.
     Args:
         outfile (str): output ROOT file name

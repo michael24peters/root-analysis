@@ -4,7 +4,6 @@
 ################################################################################
 
 import ROOT
-import sys
 import argparse
 
 #-------------------------------------------------------------------------------
@@ -131,6 +130,7 @@ infile = args.infile
 # Put outfile in same directory as infile with fixed name
 if infile is not None:
     outfile = '/'.join(infile.split('/')[:-1]) + '/fiducial_requirements.root'
+else: raise ValueError('Input file must be specified with -i or --infile flag.')
 # Output file name
 print(f'Reading from {infile}, writing to {outfile}.')
 

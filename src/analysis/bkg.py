@@ -17,7 +17,7 @@ parser.add_argument('-i', '--infile',
                     help = 'Input ROOT file')
 parser.add_argument('-v', '--verbose', action='store_true', 
                     help='Enable verbose output')
-parser.add_argument('-o', '--outfile',
+parser.add_argument('-o', '--outfile', default='out/bkg_ana.txt',
                     help='Output text file')
 parser.add_argument('--pnnmu_cut', type=float, default=None,
                     help='PROBNNmu cut value applied to input file')
@@ -27,8 +27,7 @@ args = parser.parse_args()
 
 try: infile = args.infile
 except: raise ValueError('Input file must be specified with -i flag.')
-try: outfile = args.outfile
-except: outfile = 'out/bkg_ana.txt'
+outfile = args.outfile
 verbose = args.verbose
 pnnmu_cut = args.pnnmu_cut
 if pnnmu_cut is not None:

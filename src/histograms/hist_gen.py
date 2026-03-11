@@ -4,29 +4,11 @@
 ################################################################################
 
 import ROOT
-from anaroot.src.utils.histograms import create_histograms
-import sys
-import argparse
+from anaroot.src.utils.histograms import createHistograms
+from anaroot.src.utils.io import parseArgs
 
-parser = argparse.ArgumentParser()
-parser.add_argument(
-    '-i', '--infile',
-    help='Input ROOT file'
-)
-parser.add_argument(
-    '-s', '--signal',
-    action='store_true',
-    help='Use signal file'
-)
-args = parser.parse_args()
-
-infile = args.infile
-# Put outfile in hist/ directory, signal/ if signal file, minbias/ if minbias
-# file, with fixed name
-if infile is not None:
-    if args.signal: outfile = 'hist/signal/hist_gen.root'
-    else: outfile = 'hist/minbias/hist_gen.root'
-
+# Parse command line arguments for input and output files
+infile, outfile, _ = parseArgs('hist', 'gen')
 print(f'Reading from {infile}, writing to {outfile}.')
 
 # Arrays to hold histogram data
@@ -91,7 +73,7 @@ names = ['mc_pid',
          'mc_p', 'mc_pt', 'mc_pz']
 
 # Create histograms and save to file
-create_histograms(outfile, binwidths, arrays, names)
+createHistograms(outfile, binwidths, arrays, names)
 
 print('Number of generated tags = ', ntag)
 print(f'Done: wrote histograms to {outfile}')

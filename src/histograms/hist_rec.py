@@ -4,31 +4,12 @@
 ################################################################################
 
 import ROOT
-from anaroot.src.utils.histograms import create_histograms
-import sys
-import argparse
+from anaroot.src.utils.histograms import createHistograms
+from anaroot.src.utils.io import parseArgs
 
-parser = argparse.ArgumentParser()
-parser.add_argument(
-    '-i', '--infile',
-    help='Input ROOT file'
-)
-parser.add_argument(
-    '-s', '--signal',
-    action='store_true',
-    help='Use signal file'
-)
-args = parser.parse_args()
-
-infile = args.infile
-# Put outfile in hist/ directory, signal/ if signal file, minbias/ if minbias
-# file, with fixed name
-if infile is not None:
-    if args.signal: outfile = 'hist/signal/hist_rec.root'
-    else: outfile = 'hist/minbias/hist_rec.root'
-
-
-print(f'Reading from {infile}, writing to {outfile}:')
+# Parse command line arguments for input and output files
+infile, outfile, _ = parseArgs('hist', 'rec')
+print(f'Reading from {infile}, writing to {outfile}.')
 
 # Arrays to hold histogram data
 arr_tag_pid, arr_prt_pid = [], []
@@ -110,7 +91,7 @@ names = ['tag_pid', 'prt_pid',
          'prt_p', 'prt_pt', 'prt_pz']
          
 # Create histograms and save to output file
-create_histograms(outfile, binwidths, arrays, names)
+createHistograms(outfile, binwidths, arrays, names)
 
 print('Number of reconstructed tags = ', ntag)
 print('Number of reconstructed daughters = ', nprt)

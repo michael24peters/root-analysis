@@ -1,0 +1,57 @@
+========================= Background Analysis Results ==========================
+*_MISMATCH: Daughter has MC match but reco pid does not match gen pid.
+*_ERROR: Daughter has MC match but did reco did not match to candidate gen dtr.
+--------------------------------------------------------------------------------
+Total candidates processed:    441
+Total signal candidates:        10
+Total background candidates:   431
+--------------------------------------------------------------------------------
+Background error counts:
+- MUP_PID_MISMATCH:             68
+- MUP_ONLY_PID_MISMATCH:        35
+- MUM_PID_MISMATCH:             70
+- MUM_ONLY_PID_MISMATCH:        37
+- DIMUON_PID_MISMATCH:          33
+- PHOTON_PID_MISMATCH:           0
+- MUP_ERROR:                   362
+- MUP_ONLY_ERROR:               35
+- MUM_ERROR:                   360
+- MUM_ONLY_ERROR:               37
+- DIMUON_ERROR:                325
+- PHOTON_ERROR:                  0
+- OTHER_ERROR:                   0
+--------------------------------------------------------------------------------
+Background error rates:
+- P(dimuon error | muon error) = 89.78
+- P(mu+ error)                 = 82.09
+- P(mu- error)                 = 81.63
+- P(photon error)              = 0.00
+--------------------------------------------------------------------------------
+List of PID mismatches (ranked by frequency):
+
+--- MU+ ---
++-----+----+
+| PID | #  |
+| --- | -- |
+| 211 | 63 |
+| 321 | 4  |
+| 223 | 1  |
++-----+----+
+
+--- MU- ---
++-------+----+
+|   PID | #  |
+| ----- | -- |
+|  -211 | 61 |
+|  -321 | 7  |
+|    11 | 1  |
+| -2212 | 1  |
++-------+----+
+
+--- PHOTON ---
+(none)
+
+--- OTHER ---
+(none)
+--------------------------------------------------------------------------------
+
