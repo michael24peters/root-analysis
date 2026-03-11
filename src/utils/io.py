@@ -6,7 +6,7 @@
 import argparse
 import os
 
-def parseArgs(subdir, name):
+def parse_args(subdir, name):
     '''
     Parse command line arguments for input and output files. Creates output
     directory if it doesn't exist.

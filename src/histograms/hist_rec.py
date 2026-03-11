@@ -4,11 +4,11 @@
 ################################################################################
 
 import ROOT
-from anaroot.src.utils.histograms import createHistograms
-from anaroot.src.utils.io import parseArgs
+from anaroot.src.utils.histograms import create_histograms
+from anaroot.src.utils.io import parse_args
 
 # Parse command line arguments for input and output files
-infile, outfile, _ = parseArgs('hist', 'rec')
+infile, outfile, _ = parse_args('hist', 'rec')
 print(f'Reading from {infile}, writing to {outfile}.')
 
 # Arrays to hold histogram data
@@ -91,7 +91,7 @@ names = ['tag_pid', 'prt_pid',
          'prt_p', 'prt_pt', 'prt_pz']
          
 # Create histograms and save to output file
-createHistograms(outfile, binwidths, arrays, names)
+create_histograms(outfile, binwidths, arrays, names)
 
 print('Number of reconstructed tags = ', ntag)
 print('Number of reconstructed daughters = ', nprt)
