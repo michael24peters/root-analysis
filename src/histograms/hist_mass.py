@@ -16,10 +16,10 @@
 
 import ROOT
 from anaroot.src.utils.histograms import create_histograms
-from anaroot.src.utils.io import parse_args
+from anaroot.src.utils.io import parse_hist_args
 
 # Parse command line arguments for input file, output file, and decay mode
-infile, outfile, decay = parse_args('hist', 'mass')
+infile, outfile, decay = parse_hist_args('mass')
 if decay == 'eta2mumu': ndtr = 2
 elif decay == 'eta2mumugamma': ndtr = 3
 else: raise ValueError(f'Invalid decay mode: {decay}')

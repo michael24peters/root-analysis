@@ -5,10 +5,10 @@
 
 import ROOT
 from anaroot.src.utils.histograms import create_histograms
-from anaroot.src.utils.io import parse_args
+from anaroot.src.utils.io import parse_hist_args
 
 # Parse command line arguments for input and output files
-infile, outfile, _ = parse_args('hist', 'gen')
+infile, outfile, _ = parse_hist_args('gen')
 print(f'Reading from {infile}, writing to {outfile}.')
 
 # Arrays to hold histogram data

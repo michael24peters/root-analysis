@@ -7,21 +7,9 @@
 # pull plot: see example, either do difference / bin error OR ratio
 
 import ROOT
-import sys
+from anaroot.src.utils.io import parse_plot_args
 
-# Optional command line argument: include stats box (none by default)
-include_stats = False
-sig_file = False
-if len(sys.argv) > 1:
-    if 'stats' in sys.argv[1:]: include_stats = True
-    if 'signal' in sys.argv[1:]: sig_file = True
-
-if sig_file:
-    infile = 'hist/signal/hist_gen.root'
-    fileheader = 'figs/signal/'
-else: 
-    infile = 'hist/minbias/hist_gen.root'
-    fileheader = 'figs/minbias/'
+infile, fileheader, decay, include_stats, _ = parse_plot_args('gen')
 
 print(f'Reading from {infile} and writing to {fileheader}*.png')
 
