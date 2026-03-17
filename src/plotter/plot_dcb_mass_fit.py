@@ -80,7 +80,7 @@ parser = argparse.ArgumentParser(
 
 # Positional
 parser.add_argument("rootfile",
-                    help="Input ROOT file (TTree='tree', branch='tag_m')")
+                    help="Input ROOT file")
 parser.add_argument("output", nargs="?", default="dcb_fit.png",
                     help="Output PNG file (default: dcb_fit.png)")
 
@@ -120,9 +120,12 @@ xmin, xmax = args.xmin, args.xmax
 
 
 # ─── ROOT import ──────────────────────────────────────────────────────────────
-import ROOT
-ROOT.gROOT.SetBatch(True)          # suppress interactive canvas pop-ups
-ROOT.RooMsgService.instance().setGlobalKillBelow(ROOT.RooFit.WARNING)
+try:
+    import ROOT
+    ROOT.gROOT.SetBatch(True)
+    ROOT.RooMsgService.instance().setGlobalKillBelow(ROOT.RooFit.WARNING)
+except ImportError:
+    sys.exit("PyROOT is not available. Please install ROOT with Python bindings.")
 
 
 # ─── Load data ────────────────────────────────────────────────────────────────
@@ -140,8 +143,8 @@ if not tree:
 
 
 # ─── Fill histogram from "tag_m" branch ───────────────────────────────────────
-h = ROOT.TH1D("h_tagm", "tag_m", args.nbins, xmin, xmax)
-h.Sumw2()                            # store sum-of-weights² for proper error bars
+h = ROOT.TH1D("h_tagm", "tag_m;m_{#eta} (MeV);Counts", args.nbins, xmin, xmax)
+h.Sumw2()  # sum of squares of weights for error bars
 tree.Draw("tag_m>>h_tagm", "", "goff")   # "goff" = no graphics output
 n_total = int(h.GetEntries())
 print(f"[info] Entries in [{xmin}, {xmax}] MeV : {n_total}")
@@ -182,9 +185,7 @@ alphaR = ROOT.RooRealVar("alphaR", "alphaR", args.alphaR_init,  0.10,  10.0)
 nR     = ROOT.RooRealVar("nR",     "nR",     args.nR_init,      1.01, 100.0)
 
 if args.symmetric:
-    # TODO: understand this better; in any case I don't do symmetric fits in
-    # this analysis, so it's a low priority item.
-    # ── Symmetric DCB: tie right-tail parameters to left-tail ────────────────
+    # Symmetric DCB: tie right-tail parameters to left-tail
     # RooFormulaVar evaluates "@0" = alphaL at every function call, so
     # alphaR_eff automatically tracks alphaL as the minimiser moves it.
     # Fitting only α_L and n_L reduces the free parameter count by 2.
@@ -196,7 +197,7 @@ if args.symmetric:
     )
     print("[info] Symmetric DCB: α_R ≡ α_L ,  n_R ≡ n_L")
 else:
-    # ── Asymmetric DCB: left and right tail parameters float independently ────
+    # Asymmetric DCB: left and right tail parameters float independently
     alphaR_eff = alphaR
     nR_eff     = nR
 
@@ -210,7 +211,7 @@ dcb = ROOT.RooCrystalBall(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  Background model: 2nd-order Chebyshev polynomial
+#  Background model: Chebyshev polynomial
 # ─────────────────────────────────────────────────────────────────────────────
 #
 # RooChebychev normalises x to x̃ ∈ [−1, 1] across the fit range, then builds:
@@ -226,18 +227,15 @@ dcb = ROOT.RooCrystalBall(
 #   • is guaranteed positive over the fit range for small |c0|, |c1|
 #   • has orthogonal basis functions → c0, c1 are nearly uncorrelated
 #
-c0  = ROOT.RooRealVar("c0", "c0",  0.0, -5.0, 5.0)
-c1  = ROOT.RooRealVar("c1", "c1",  0.0, -5.0, 5.0)
-bkg = ROOT.RooChebychev("bkg", "2nd-order Chebyshev",
+c0 = ROOT.RooRealVar("c0", "c0",  0.0, -5.0, 5.0)
+c1 = ROOT.RooRealVar("c1", "c1",  0.0, -5.0, 5.0)
+bkg = ROOT.RooChebychev("bkg", "Chebyshev",
                          m, ROOT.RooArgList(c0, c1))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  Extended combined model:  N_sig · DCB  +  N_bkg · Cheb
+#  Extended combined model:  N_sig · DCB  +  N_bkg · Chebyshev
 # ─────────────────────────────────────────────────────────────────────────────
-#
-# TODO: understand this better; why do we need this? why n_total * 2.0 as upper
-# bound?  why not just fix N_sig + N_bkg = n_total?
 #
 # RooAddPdf in *extended* mode floats the total number of events as part of the
 # likelihood, rather than treating it as fixed.  This gives proper statistical
@@ -249,7 +247,7 @@ n_bkg = ROOT.RooRealVar("n_bkg", "background yield",
                          n_total * 0.5, 0.0, n_total * 2.0)
 
 model = ROOT.RooAddPdf(
-    "model", "DCB + 2nd-order Chebyshev",
+    "model", "DCB + Chebyshev",
     ROOT.RooArgList(dcb, bkg),
     ROOT.RooArgList(n_sig, n_bkg),
 )
@@ -269,7 +267,7 @@ fit_result = model.fitTo(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  χ²/ndf  and  per-bin fit predictions
+#  χ²/ndf and per-bin fit predictions
 # ─────────────────────────────────────────────────────────────────────────────
 #
 # Variables:
@@ -277,9 +275,6 @@ fit_result = model.fitTo(
 #  f_i: model prediction for bin i (from fit)
 #  chi2: how far data is from model prediction
 #  Δᵢ: normalized residual for bin i, i.e., Δᵢ = (dᵢ − fᵢ) / √fᵢ
-#
-# TODO: Think about why you would use the fit value for variance and not the
-# data value.
 # 
 # Strategy:
 #   1. Plot data + model onto a dedicated RooFit frame.
@@ -311,52 +306,36 @@ chi2_abs = chi2_per_ndf * ndf
 
 # ─── Per-bin values for the pull histograms ───────────────────────────────────
 #
-# TODO: understand this better. Why extract curve from frame instead of the
-# model PDF directly? I also don't understand what's being done here and how
-# the pull values are being found. What were we doing above?
+# Pull definition: data-based residual  (d − f) / σ_d 
 #
-# The RooCurve on the frame is plotted in the same units as the data histogram
-# (counts per bin), so  curve.Eval(bin_centre)  directly gives f_i.
+# We normalize by the DATA uncertainty (from SumW2), not model prediction.
 #
-fit_curve = frame_diag.getCurve("fit_curve")
+# Physics rationale (from advisor): Data is the ground truth with measured/real
+# uncertainty; the fit is just one proposed explanation. So deviations should be
+# scaled by what the data actually measured, not by what an imperfect model predicts.
+#
+# For unweighted events: σ_d = sqrt(d), so pull = (d − f) / sqrt(d).
+#
+# Note: RooFit's frame.chiSquare() uses Poisson-style (d − f) / sqrt(f) for its
+# global χ²/ndf summary, but our per-bin pull plot uses data-based (d − f) / σ_d,
+# which is the appropriate residual for visual diagnostics on unweighted data.
+#
+# Distributed as N(0,1) if model is correct and bin statistics are sufficient.
 
-bin_ctrs  = []   # bin centre positions [MeV]
-data_vals = []   # observed counts  d_i
-fit_vals  = []   # model predicted  f_i
-data_errs = []   # SumW2 data errors  σ_{d,i}
+fit_curve = frame_diag.getCurve("fit_curve")
+bin_ctrs = []  # bin centre positions [MeV]
+pulls = []
 
 for i in range(1, args.nbins + 1):
-    bc  = h.GetBinCenter(i)
-    d   = h.GetBinContent(i)
-    err = h.GetBinError(i)      # sqrt(Σwᵢ²) from Sumw2(); equals √d for unit weights
-    f   = fit_curve.Eval(bc)    # model expectation at this bin centre
+    bc = h.GetBinCenter(i)  # bin center position [MeV]
+    d = h.GetBinContent(i)  # observed data count
+    err = h.GetBinError(i)  # sum of squares of weights error
+    f = fit_curve.Eval(bc)  # model prediction at bin center
 
-    bin_ctrs.append(bc)
-    data_vals.append(d)
-    fit_vals.append(f)
-    data_errs.append(err)
+    bin_ctrs.append(bc)  # store bin centre for pull plot x-axis
 
-# TODO: Now I'm confused. Above the chi2_per_ndf asserted that we're using
-# Poisson definition for std, but then here we have two options...
-#
-# ── Pull type 1: Poisson-normalised  (d − f) / √f ────────────────────────────
-# Standard pull for counting experiments with unweighted events.
-# Distributed as N(0,1) when the model is correct and f >> 1.
-pull_poisson = [
-    (d - f) / math.sqrt(abs(f)) if f > 0 else 0.0
-    for d, f in zip(data_vals, fit_vals)
-]
-
-# ── Pull type 2: SumW2-normalised  (d − f) / σ_d ─────────────────────────────
-# Uses the data (SumW2) error as the denominator instead of the model prediction.
-# Preferable for weighted events or when the model prediction is unreliable in
-# low-statistics bins.  Note: for unweighted data σ_d = √d, so pull2 ≈ pull1
-# when f ≈ d (i.e. when the fit is good).
-pull_sumw2 = [
-    (d - f) / err if err > 0 else 0.0
-    for d, f, err in zip(data_vals, fit_vals, data_errs)
-]
-
+    if err > 0: pulls.append((d - f) / err)
+    else: pulls.append(0.0)
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Print fit summary to terminal
@@ -372,10 +351,10 @@ status_code = fit_result.status()
 
 # Resolve right-tail parameter values for printing
 # (in symmetric mode these equal the left-tail values)
-aR_val = alphaL.getVal()  if args.symmetric else alphaR.getVal()
+aR_val = alphaL.getVal()   if args.symmetric else alphaR.getVal()
 aR_err = alphaL.getError() if args.symmetric else alphaR.getError()
-nR_val = nL.getVal()      if args.symmetric else nR.getVal()
-nR_err = nL.getError()    if args.symmetric else nR.getError()
+nR_val = nL.getVal()       if args.symmetric else nR.getVal()
+nR_err = nL.getError()     if args.symmetric else nR.getError()
 
 W = 62   # table width
 print()
@@ -414,14 +393,12 @@ print()
 #
 #  ┌───────────────────────────────────────────────┐  y = 1.00
 #  │                                               │
-#  │    Main fit (58%):                            │
+#  │    Main fit (60%):                            │
 #  │    data points  +  total fit curve            │
 #  │    +  DCB signal  +  Cheb. bkg  +  2 legends  │
 #  │                                               │
-#  ├───────────────────────────────────────────────┤  y = 0.42
-#  │  Pull panel 1  (21%): (d−f) / √f              │
-#  ├───────────────────────────────────────────────┤  y = 0.21
-#  │  Pull panel 2  (21%): (d−f) / σ_d             │
+#  ├───────────────────────────────────────────────┤  y = 0.40
+#  │  Pull panel 2  (40%): (d−f) / σ_d             │
 #  └───────────────────────────────────────────────┘  y = 0.00
 #
 #  Left and right margins are identical across all pads so the x-axis aligns.
@@ -433,19 +410,17 @@ ROOT.gStyle.SetPadTickY(1)
 
 canvas = ROOT.TCanvas("c", "DCB mass fit", 900, 950)
 
-# Pad y-boundaries
-Y_MAIN_BOT  = 0.42
-Y_P1_BOT    = 0.21
+# Pad y-boundaries (with only two pads: main ~60%, pull ~40%)
+Y_MAIN_BOT  = 0.40
 Y_P2_BOT    = 0.00
 
 L_MARGIN = 0.13
 R_MARGIN = 0.05
 
 pad_main  = ROOT.TPad("pad_main",  "", 0.0, Y_MAIN_BOT, 1.0, 1.00)
-pad_pull1 = ROOT.TPad("pad_pull1", "", 0.0, Y_P1_BOT,   1.0, Y_MAIN_BOT)
-pad_pull2 = ROOT.TPad("pad_pull2", "", 0.0, Y_P2_BOT,   1.0, Y_P1_BOT)
+pad_pull = ROOT.TPad("pad_pull", "", 0.0, Y_P2_BOT,   1.0, Y_MAIN_BOT)
 
-for pad in (pad_main, pad_pull1, pad_pull2):
+for pad in (pad_main, pad_pull):
     pad.SetLeftMargin(L_MARGIN)
     pad.SetRightMargin(R_MARGIN)
     pad.Draw()
@@ -453,11 +428,8 @@ for pad in (pad_main, pad_pull1, pad_pull2):
 pad_main.SetTopMargin(0.08)
 pad_main.SetBottomMargin(0.02)    # no x-axis labels drawn here
 
-pad_pull1.SetTopMargin(0.04)
-pad_pull1.SetBottomMargin(0.04)   # x-axis suppressed on this pad too
-
-pad_pull2.SetTopMargin(0.04)
-pad_pull2.SetBottomMargin(0.35)   # enlarged bottom → room for x-axis title
+pad_pull.SetTopMargin(0.04)
+pad_pull.SetBottomMargin(0.35)   # enlarged bottom → room for x-axis title
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -507,25 +479,25 @@ model.plotOn(
 # Hide x-axis on the main pad (shared visual axis is on the bottom pull pad)
 frame.GetXaxis().SetLabelSize(0)
 frame.GetXaxis().SetTitleSize(0)
-frame.GetYaxis().SetTitle("Counts / bin")
+frame.GetYaxis().SetTitle("Counts")
 frame.GetYaxis().SetTitleSize(0.055)
 frame.GetYaxis().SetTitleOffset(0.95)
 frame.GetYaxis().SetLabelSize(0.047)
 frame.Draw()
 
 # ── Legend 1: curve / component identification ────────────────────────────────
-leg1 = ROOT.TLegend(0.60, 0.50, 0.94, 0.90)
+leg1 = ROOT.TLegend(0.65, 0.62, 0.96, 0.88)
 leg1.SetBorderSize(0)
 leg1.SetFillStyle(0)
-leg1.SetTextFont(42)
-leg1.SetTextSize(0.042)
-leg1.AddEntry(frame.findObject("data"),     "Data",                    "PE")
-leg1.AddEntry(frame.findObject("total"),    "DCB + Cheb.  (total)",    "L")
-leg1.AddEntry(frame.findObject("sig_only"), "DCB signal",              "L")
-leg1.AddEntry(frame.findObject("bkg_only"), "Cheb. background",        "L")
+# leg1.SetTextFont(42)
+leg1.SetTextSize(0.032)
+leg1.AddEntry(frame.findObject("data"),     "Data",                     "PE")
+leg1.AddEntry(frame.findObject("total"),    "Total fit",                 "L")
+leg1.AddEntry(frame.findObject("sig_only"), "Signal (DCB)",              "L")
+leg1.AddEntry(frame.findObject("bkg_only"), "Background (Cheb.)",        "L")
 leg1.Draw()
 
-# ── Legend 2: fit parameters (TLatex annotation) ──────────────────────────────
+# ── Legend 2: fit parameters (TLatex) ─────────────────────────────────────────
 #
 # Drawn on the main pad in NDC coordinates.
 # Each row corresponds to one fit parameter or summary statistic.
@@ -536,9 +508,9 @@ lat.SetTextFont(42)
 lat.SetTextSize(0.040)
 lat.SetTextAlign(12)    # left-align horizontally, centre vertically
 
-x0_lat = 0.15          # left edge of the annotation block
-y0_lat = 0.88          # top y position
-dy_lat = 0.058         # vertical spacing between rows
+x0_lat = 0.16          # left edge of the annotation block
+y0_lat = 0.85          # top y position
+dy_lat = 0.06         # vertical spacing between rows
 
 param_rows = [
     f"#mu = {mean.getVal():.2f} #pm {mean.getError():.2f}  MeV",
@@ -598,20 +570,19 @@ def draw_pull_pad(pad, pull_vals, bin_ctrs, xmin, xmax, nbins,
     hp.SetFillColorAlpha(fill_color, 0.42)
     hp.SetLineWidth(1)
 
-    # Axis size scaling: pull pads are ~21% of canvas height, so labels must
-    # be scaled up by roughly 58%/21% ≈ 2.8× relative to the main-pad sizes.
-    S = 0.130   # label + title size for the pull pads
+    # Axis size: slightly larger than main pad (60%/40% ≈ 1.5× scaling)
+    # Pull pad's 40% of canvas height requires proportionally larger labels
 
     hp.GetYaxis().SetTitle(ylabel)
-    hp.GetYaxis().SetTitleSize(S)
-    hp.GetYaxis().SetLabelSize(S)
-    hp.GetYaxis().SetTitleOffset(0.30)
+    hp.GetYaxis().SetTitleSize(0.080)
+    hp.GetYaxis().SetLabelSize(0.070)
+    hp.GetYaxis().SetTitleOffset(0.50)
     hp.GetYaxis().SetNdivisions(504)
 
     if show_x_axis:
         hp.GetXaxis().SetTitle("m_{#eta}  [MeV]")
-        hp.GetXaxis().SetTitleSize(S)
-        hp.GetXaxis().SetLabelSize(S)
+        hp.GetXaxis().SetTitleSize(0.080)
+        hp.GetXaxis().SetLabelSize(0.070)
         hp.GetXaxis().SetTitleOffset(0.85)
     else:
         hp.GetXaxis().SetLabelSize(0)
@@ -637,18 +608,10 @@ def draw_pull_pad(pad, pull_vals, bin_ctrs, xmin, xmax, nbins,
     return hp, ref_lines
 
 
-# ── Draw pull pad 1:  (d − f) / √f ───────────────────────────────────────────
-hp1, lines1 = draw_pull_pad(
-    pad_pull1, pull_poisson, bin_ctrs, xmin, xmax, args.nbins,
-    ylabel     = "(d#minus f) / #sqrt{f}",
-    fill_color = ROOT.kAzure + 2,
-    show_x_axis = False,          # x labels suppressed; shared axis is below
-)
-
-# ── Draw pull pad 2:  (d − f) / σ_d ──────────────────────────────────────────
-hp2, lines2 = draw_pull_pad(
-    pad_pull2, pull_sumw2, bin_ctrs, xmin, xmax, args.nbins,
-    ylabel     = "(d#minus f) / #sigma_{d}",
+# ── Draw pull pad:  (d − f) / σ_d ────────────────────────────────────────────
+pull_hist, ref_lines = draw_pull_pad(
+    pad_pull, pulls, bin_ctrs, xmin, xmax, args.nbins,
+    ylabel     = "(y_{data}#minus y_{fit}) / #sigma_{data}",
     fill_color = ROOT.kOrange + 7,
     show_x_axis = True,           # bottom pad: show x-axis with title
 )
@@ -657,7 +620,7 @@ canvas.Update()
 
 
 # ─── Save plot ────────────────────────────────────────────────────────────────
-os.makedirs("outputs", exist_ok=True)
+os.makedirs("out", exist_ok=True)
 outpath = os.path.join("out", args.output)
 canvas.SaveAs(outpath)
 print(f"[done] Plot saved to: {outpath}")
@@ -669,7 +632,7 @@ print(f"[done] Plot saved to: {outpath}")
 results = {
     "meta": {
         "input_file":    args.rootfile,
-        "fit_model":     "Double Crystal Ball + 2nd-order Chebyshev",
+        "fit_model":     "Double Crystal Ball + Chebyshev",
         "symmetric_dcb": args.symmetric,
         "mass_range":    [xmin, xmax],
         "nbins":         args.nbins,

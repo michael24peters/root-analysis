@@ -15,6 +15,7 @@ ntuple/*
 
 # outputs/ directory
 outputs/*
+out/*
 
 # old/ directory
 old/*
