@@ -78,7 +78,7 @@ parser = argparse.ArgumentParser(
     formatter_class=argparse.RawDescriptionHelpFormatter,
 )
 
-# Positional
+# IO
 parser.add_argument("rootfile",
                     help="Input ROOT file")
 parser.add_argument("output", nargs="?", default="dcb_fit.png",
@@ -156,9 +156,7 @@ if n_total == 0:
 m = ROOT.RooRealVar("m", "m_{#eta}  [MeV]", xmin, xmax)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Signal model: Double Crystal Ball (RooCrystalBall)
-# ─────────────────────────────────────────────────────────────────────────────
+# ─── Signal model: Double Crystal Ball (RooCrystalBall) ───────────────────────
 #
 # RooCrystalBall(name, title, x, x0, sigma, alphaL, nL, alphaR, nR)
 #
@@ -205,14 +203,12 @@ else:
 dcb = ROOT.RooCrystalBall(
     "dcb", "Double Crystal Ball",
     m, mean, sigma,
-    alphaL, nL,          # left  tail
+    alphaL, nL,  # left  tail
     alphaR_eff, nR_eff,  # right tail (may be tied in symmetric mode)
 )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Background model: Chebyshev polynomial
-# ─────────────────────────────────────────────────────────────────────────────
+# ─── Background model: Chebyshev polynomial ───────────────────────────────────
 #
 # RooChebychev normalises x to x̃ ∈ [−1, 1] across the fit range, then builds:
 #
@@ -233,13 +229,10 @@ bkg = ROOT.RooChebychev("bkg", "Chebyshev",
                          m, ROOT.RooArgList(c0, c1))
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Extended combined model:  N_sig · DCB  +  N_bkg · Chebyshev
-# ─────────────────────────────────────────────────────────────────────────────
+# ─── Extended combined model:  N_sig · DCB  +  N_bkg · Chebyshev ──────────────
 #
-# RooAddPdf in *extended* mode floats the total number of events as part of the
-# likelihood, rather than treating it as fixed.  This gives proper statistical
-# errors on the yields and properly penalises the Poisson term for N_tot.
+# RooAddPdf in extended mode floats the total number of events as part of the
+# likelihood, rather than treating it as fixed.
 #
 n_sig = ROOT.RooRealVar("n_sig", "signal yield",
                          n_total * 0.5, 0.0, n_total * 2.0)
@@ -266,9 +259,7 @@ fit_result = model.fitTo(
 )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  χ²/ndf and per-bin fit predictions
-# ─────────────────────────────────────────────────────────────────────────────
+# ─── χ²/ndf and per-bin fit predictions ───────────────────────────────────────
 #
 # Variables:
 #  d_i: observed data count in bin i
@@ -337,9 +328,7 @@ for i in range(1, args.nbins + 1):
     if err > 0: pulls.append((d - f) / err)
     else: pulls.append(0.0)
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Print fit summary to terminal
-# ─────────────────────────────────────────────────────────────────────────────
+# ─── Print fit summary to terminal ────────────────────────────────────────────
 STATUS_CODES = {
     0: "Converged successfully",
     1: "Covariance forced positive-definite (approximate errors)",
@@ -356,7 +345,7 @@ aR_err = alphaL.getError() if args.symmetric else alphaR.getError()
 nR_val = nL.getVal()       if args.symmetric else nR.getVal()
 nR_err = nL.getError()     if args.symmetric else nR.getError()
 
-W = 62   # table width
+W = 62  # table width
 print()
 print("═" * W)
 print(f"{'DCB + CHEBYSHEV  FIT  RESULT':^{W}}")
@@ -387,21 +376,7 @@ print("═" * W)
 print()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Canvas layout
-# ─────────────────────────────────────────────────────────────────────────────
-#
-#  ┌───────────────────────────────────────────────┐  y = 1.00
-#  │                                               │
-#  │    Main fit (60%):                            │
-#  │    data points  +  total fit curve            │
-#  │    +  DCB signal  +  Cheb. bkg  +  2 legends  │
-#  │                                               │
-#  ├───────────────────────────────────────────────┤  y = 0.40
-#  │  Pull panel 2  (40%): (d−f) / σ_d             │
-#  └───────────────────────────────────────────────┘  y = 0.00
-#
-#  Left and right margins are identical across all pads so the x-axis aligns.
+# ─── Canvas layout ────────────────────────────────────────────────────────────
 
 ROOT.gStyle.SetOptStat(0)
 ROOT.gStyle.SetOptTitle(0)
@@ -432,9 +407,7 @@ pad_pull.SetTopMargin(0.04)
 pad_pull.SetBottomMargin(0.35)   # enlarged bottom → room for x-axis title
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Main fit pad
-# ─────────────────────────────────────────────────────────────────────────────
+# ─── Main fit pad ─────────────────────────────────────────────────────────────
 pad_main.cd()
 
 frame = m.frame(ROOT.RooFit.Bins(args.nbins))
@@ -485,7 +458,7 @@ frame.GetYaxis().SetTitleOffset(0.95)
 frame.GetYaxis().SetLabelSize(0.047)
 frame.Draw()
 
-# ── Legend 1: curve / component identification ────────────────────────────────
+# --- Legend 1: curve / component identification ---
 leg1 = ROOT.TLegend(0.65, 0.62, 0.96, 0.88)
 leg1.SetBorderSize(0)
 leg1.SetFillStyle(0)
@@ -497,7 +470,7 @@ leg1.AddEntry(frame.findObject("sig_only"), "Signal (DCB)",              "L")
 leg1.AddEntry(frame.findObject("bkg_only"), "Background (Cheb.)",        "L")
 leg1.Draw()
 
-# ── Legend 2: fit parameters (TLatex) ─────────────────────────────────────────
+# --- Legend 2: fit parameters (TLatex) ---
 #
 # Drawn on the main pad in NDC coordinates.
 # Each row corresponds to one fit parameter or summary statistic.
@@ -530,9 +503,7 @@ for k, row in enumerate(param_rows):
 pad_main.Update()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Pull pad helper
-# ─────────────────────────────────────────────────────────────────────────────
+# ─── Pull pad helper ──────────────────────────────────────────────────────────
 def draw_pull_pad(pad, pull_vals, bin_ctrs, xmin, xmax, nbins,
                   ylabel, fill_color, show_x_axis=False):
     """
@@ -626,9 +597,7 @@ canvas.SaveAs(outpath)
 print(f"[done] Plot saved to: {outpath}")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Save JSON results
-# ─────────────────────────────────────────────────────────────────────────────
+# ─── Save JSON results ────────────────────────────────────────────────────────
 results = {
     "meta": {
         "input_file":    args.rootfile,
@@ -713,4 +682,5 @@ with open(json_outpath, "w") as jf:
     json.dump(results, jf, indent=2)
 print(f"[done] JSON results saved to: {json_outpath}")
 
+# Close ROOT file
 rfile.Close()
