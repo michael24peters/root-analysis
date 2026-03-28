@@ -64,6 +64,7 @@ DCB mode:
 
 Output:
   --output-json PATH      JSON results file  (default: dcb_fit_results.json)
+  --dump-pulls            Save per-bin pull values to out/pulls.npy
 """
 
 import sys
@@ -71,6 +72,7 @@ import os
 import json
 import argparse
 import math
+import numpy as np
 
 # ─── CLI ──────────────────────────────────────────────────────────────────────
 parser = argparse.ArgumentParser(
@@ -114,6 +116,8 @@ g_dcb.add_argument("--symmetric",   action="store_true",
 g_out = parser.add_argument_group("output")
 g_out.add_argument("--output-json", default="dcb_fit_results.json",
                    help="JSON results file name/path written under out/ (default: dcb_fit_results.json)")
+g_out.add_argument("--dump-pulls", action="store_true", default=False,
+                   help="Save per-bin pull values to out/pulls.npy")
 
 args = parser.parse_args()
 xmin, xmax = args.xmin, args.xmax
@@ -156,6 +160,10 @@ if n_total == 0:
 m = ROOT.RooRealVar("m", "m_{#eta}  [MeV]", xmin, xmax)
 
 
+# TODO: possibly share x0 but have independent sigma
+# possibly should get fit params for each crystal ball fnc, then propagate to
+# each of those; should look into HOW I'm doing this and figure out how to do
+# phil's request
 # ─── Signal model: Double Crystal Ball (RooCrystalBall) ───────────────────────
 #
 # RooCrystalBall(name, title, x, x0, sigma, alphaL, nL, alphaR, nR)
@@ -327,6 +335,12 @@ for i in range(1, args.nbins + 1):
 
     if err > 0: pulls.append((d - f) / err)
     else: pulls.append(0.0)
+
+# Save per-bin pull values to a numpy file
+if args.dump_pulls:
+    np.save(os.path.join("out", "pulls.npy"), np.array(pulls))
+    print("[info] Per-bin pull values saved to: out/pulls.npy")
+
 
 # ─── Print fit summary to terminal ────────────────────────────────────────────
 STATUS_CODES = {
