@@ -1,7 +1,7 @@
-################################################################################
-# Script to analyze background.                                                #
-# Author: Michael Peters                                                       #
-################################################################################
+# ╔════════════════════════════════════════════════════════════════════════════╗
+# ║ Script to analyze background.                                              ║
+# ║ Author: Michael Peters                                                     ║
+# ╚════════════════════════════════════════════════════════════════════════════╝
 
 from __future__ import annotations
 
@@ -10,30 +10,36 @@ import argparse
 from dataclasses import dataclass
 from enum import Enum
 from collections import Counter
+import os
+import sys
+import json
 
 # Parse command line arguments
 parser = argparse.ArgumentParser()
-parser.add_argument('-i', '--infile',
+parser.add_argument('-i', '--infile', required=True,
                     help = 'Input ROOT file')
-parser.add_argument('-v', '--verbose', action='store_true', 
+parser.add_argument('-v', '--verbose', action='store_true', default=False,
                     help='Enable verbose output')
-parser.add_argument('-o', '--outfile', default='out/bkg_ana.txt',
+parser.add_argument('-o', '--outfile', default='out/bkg_ana',
                     help='Output text file')
 parser.add_argument('--pnnmu_cut', type=float, default=None,
                     help='PROBNNmu cut value applied to input file')
-parser.add_argument('-g', '--gamma', action='store_true',
-                    help='Flag for eta -> mu+ mu- gamma case')
+# Store number of daughters per candidate, 2 for eta -> mu+ mu-, 3 for 
+# eta -> mu+ mu- gamma, etc.
+parser.add_argument('--dtrs', action='store', default=2, type=int,
+                    help='Number of daughters per candidate (default: 2)')
 args = parser.parse_args()
 
-try: infile = args.infile
-except: raise ValueError('Input file must be specified with -i flag.')
+# Handle arguments, set up IO.
+infile = args.infile
+os.makedirs('out', exist_ok=True)
 outfile = args.outfile
 verbose = args.verbose
 pnnmu_cut = args.pnnmu_cut
 if pnnmu_cut is not None:
-    print(f'Applying PROBNNmu cut: {pnnmu_cut}')
+    print(f'[info] Applying PROBNNmu cut: {pnnmu_cut}')
 
-print(f'Reading from {infile}, writing to {outfile}.')
+print(f'[info] Reading from {infile}, writing to {outfile}.')
 
 # Possible error categories for a decay candidate
 class ErrorType(str, Enum):
@@ -83,29 +89,23 @@ tree = tfile.Get('tree')
 for entryIdx in range(0, tree.GetEntries()):
     tree.GetEntry(entryIdx)
     
-    # Print status every 100,000 events
-    check_interval = 100000
+    # Print status every 500,000 events
+    check_interval = 500000
     if entryIdx % check_interval == 0 and entryIdx > 0:
-        print(f'  - Processed {entryIdx:,d} events...')
+        print(f'[info] Processed {entryIdx:,d} events...')
     
+    # Explicitly define types for easier handling
     # Reconstructed particle information
-    tag_pid = getattr(tree, 'tag_pid')
-    prt_pid = getattr(tree, 'prt_pid')
+    tag_pid = [int(pid) for pid in tree.tag_pid]
+    prt_pid = [int(pid) for pid in tree.prt_pid]
     # MC-matching index information
-    prt_idx_gen = getattr(tree, 'prt_idx_gen')
-    prt_idx_mom = getattr(tree, 'prt_idx_mom')
+    prt_idx_gen = [int(idx) for idx in tree.prt_idx_gen]
+    prt_idx_mom = [int(idx) for idx in tree.prt_idx_mom]
     # Generator particle information
-    mc_pid = getattr(tree, 'mc_pid')
-    mc_idx_mom = getattr(tree, 'mc_idx_mom')
+    mc_pid = [int(pid) for pid in tree.mc_pid]
+    mc_idx_mom = [int(idx) for idx in tree.mc_idx_mom]
     # PROBNNmu branch
-    probnn_mu = getattr(tree, 'prt_pnn_mu')
-
-    # Reformat above lists for easier handling
-    prt_pid = [int(pid) for pid in prt_pid]
-    prt_idx_gen = [int(idx) for idx in prt_idx_gen]
-    prt_idx_mom = [int(idx) for idx in prt_idx_mom]
-    mc_pid = [int(pid) for pid in mc_pid]
-    mc_idx_mom = [int(idx) for idx in mc_idx_mom]
+    probnn_mu = [float(prob) for prob in tree.prt_pnn_mu]
 
     # Skip empty events
     ntags = len(tag_pid)
@@ -118,11 +118,12 @@ for entryIdx in range(0, tree.GetEntries()):
         # NOTE: can only handle one gen-level eta candidate per event, improve
         # later if needed, or just select the first one and ignore the others.
         # If so, then this check is needed to prevent out-of-bounds errors.
+        #
         # Define j0 and j1 depending on gamma_flag
-        if args.gamma: j0, j1 = i*3, i*3+3
-        else: j0, j1 = i*2, i*2+2
+        ndtrs = args.dtrs  # Number of daughters per candidate
+        j0, j1 = i * ndtrs, i * ndtrs + ndtrs
         if j1 > len(prt_pid) or j1 > len(prt_idx_gen) or j1 > len(prt_idx_mom):
-            error_log += f'Warning: event {entryIdx}, candidate {i} skipped, has incomplete daughter info.\n'
+            error_log += f'[warning] Event {entryIdx}, candidate {i} skipped, has incomplete daughter info.\n'
             continue
 
         # Apply PROBNNmu cut if specified
@@ -213,7 +214,7 @@ for entryIdx in range(0, tree.GetEntries()):
                     mc_pid=None,
                     mc_idx_mom=None,
                     err_type=err_type))
-                print('Warning: Could not assign mc_pid or mc_idx_mom for daughter.')
+                print(f'[warning] Could not assign mc_pid or mc_idx_mom for daughter.')
 
         if is_signal: nsig += 1
         else: nbkg += 1
@@ -255,50 +256,71 @@ err_counters[ErrorType.MUM_ONLY_PID_MISMATCH] = mum_err_only_count
 err_counters[ErrorType.MUP_ONLY_ERROR] = mup_err_only_count
 err_counters[ErrorType.MUM_ONLY_ERROR] = mum_err_only_count
 
-#-------------------------------------------------------------------------------
 
-
-def format_pid_freq_table(rows: list[tuple[int, int]]) -> str:
-    """Return a plain text table for (pid, count) rows."""
+#───────────────────────────────────────────────────────────────────────────────
+def format_pid_freq_table(label, rows: list[tuple[int, int]]) -> str:
+    """
+    Return a plain text table for (pid, count) rows.
+    """
     if not rows:
         return '(none)\n'
 
-    pid_w = max(len("PID"), max(len(str(pid)) for pid, _ in rows))
-    cnt_w = max(len("#"), max(len(str(cnt)) for _, cnt in rows))
-
     out = ''
-    out += '+' + '-' * (pid_w + 2) + '+' + '-' * (cnt_w + 2) + '+\n'
-    out += f'| {"PID":>{pid_w}} | {"#":<{cnt_w}} |\n'
-    out += f'| {"-" * pid_w} | {"-" * cnt_w} |\n'
+    # Determine column widths based on label and data
+    label_w = len(label)
+    pid_w = max(len(" PID "), max(len(str(pid)) for pid, _ in rows))
+    cnt_w = max(len(" # "), max(len(str(cnt)) for _, cnt in rows))
+    
+    # Label should look like '\n───── MU- ─────\n' but with dynamic width based
+    # on label
+    # Label
+    out += f'\n{"═" * ((pid_w + cnt_w + 5 - label_w) // 2)} {label} ' + \
+           f'{"═" * ((pid_w + cnt_w + 5 - label_w) // 2)}\n'
+    # Header
+    out += f"┌─{' PID ':>{pid_w}}─┬─{' # ':<{cnt_w}}─┐\n"
+    out += f"├─{'─' * pid_w}─┼─{'─' * cnt_w}─┤\n"
+    # Data
     for pid, count in rows:
-        out += f'| {pid:>{pid_w}d} | {count:<{cnt_w}d} |\n'
-    out += '+' + '-' * (pid_w + 2) + '+' + '-' * (cnt_w + 2) + '+\n'
+        out += f'│ {pid:>{pid_w}d} │ {count:<{cnt_w}d} │\n'
+    out += '└' + '─' * (pid_w + 2) + '┴' + '─' * (cnt_w + 2) + '┘\n'
     return out
 
 
-#-------------------------------------------------------------------------------
-
-
+#───────────────────────────────────────────────────────────────────────────────
 def get_analytics(verbose=False):
-    output = '='*25 + ' Background Analysis Results ' + '='*26 + '\n'
+    """
+    Return a formatted string of background analysis results, including counts,
+    error rates, and list of PID mismatches ranked by frequency for each
+    particle type. If verbose=True, also include candidate-level information and
+    error log. Designed for printing to console or writing to text file.
+    """
+    output = ''
+    W = 48  # Line width
+    output += '═' * W + '\n'
+    output += f"{'Background analysis results':^{W}}\n"
+    output += '═' * W + '\n'
     # Key to explain counters
-    output += '*_MISMATCH: Daughter has MC match but reco pid does not match gen pid.\n'
-    output += '*_ERROR: Daughter has MC match but did reco did not match to candidate gen dtr.\n'
-    output += '-'*80 + '\n'
+    output += '  *_MISMATCH: Daughter has MC match but reco' + '\n' + \
+              '    pid does not match gen pid.\n'
+    output += '  *_ERROR: Daughter has MC match but reco did' + '\n' + \
+              '    not match to candidate gen dtr.\n'
+    output += '─' * W + '\n'
     # Summary statistics
-    output += f'Total candidates processed:  {ncan:5d}\n'
-    output += f'Total signal candidates:     {nsig:5d}\n'
-    output += f'Total background candidates: {nbkg:5d}\n'
-    output += '-'*80 + '\n'
+    output += f'  {"Total candidates processed:":<31} {ncan:5d}\n'
+    output += f'  {"Total signal candidates:":<31} {nsig:5d}\n'
+    output += f'  {"Total background candidates:":<31} {nbkg:5d}\n'
     # Error counts
-    output += 'Background error counts:\n'
+    output += '─' * W + '\n'
+    output += f"{'Background error counts':^{W}}\n"
+    output += '─' * W + '\n'
     for err in err_counters:
         # Remove ErrorType. prefix for display
-        label = str(err).strip('ErrorType.') + ':'
-        output += f'- {label:<26} {err_counters[err]:5d}\n'
-    output += '-'*80 + '\n'
+        label = err.name + ':'
+        output += f'  {label:<31} {err_counters[err]:5d}\n'
     # Error rates
-    output += 'Background error rates:\n'
+    output += '─' * W + '\n'
+    output += f"{'Background error rates':^{W}}\n"
+    output += '─' * W + '\n'
     # P(dimuon error | muon error) = N(muon & dimuon) / N(muon)
     prob_dimu_given_mu = err_counters[ErrorType.DIMUON_ERROR] / \
                          max(err_counters[ErrorType.MUP_ERROR], 
@@ -308,58 +330,143 @@ def get_analytics(verbose=False):
                err_counters[ErrorType.MUM_ERROR] / ncan)
     # P(photon error)
     prob_pho = err_counters[ErrorType.PHOTON_ERROR] / ncan
-    output += f'- P(dimuon error | muon error) = {prob_dimu_given_mu*100:.2f}\n'
-    output += f'- P(mu+ error)                 = {prob_mu[0]*100:.2f}\n'
-    output += f'- P(mu- error)                 = {prob_mu[1]*100:.2f}\n'
-    output += f'- P(photon error)              = {prob_pho*100:.2f}\n'
-    output += '-'*80 + '\n'
+    output += f'  P(dimuon error | muon error) = {prob_dimu_given_mu:.4f}\n'
+    output += f'  P(mu+ error)                 = {prob_mu[0]:.4f}\n'
+    output += f'  P(mu- error)                 = {prob_mu[1]:.4f}\n'
+    output += f'  P(photon error)              = {prob_pho:.4f}\n'
     # List of MC pids causing mismatches
-    output += 'List of PID mismatches (ranked by frequency):\n'
+    output += '─' * W + '\n'
+    output += f"{'List of PID mismatches (ranked by frequency)':^{W}}\n"
+    output += '─' * W + '\n'
     # Sort list by frequency
     c_mup = Counter(mup_mismatches)
     c_mum = Counter(mum_mismatches)
     c_pho = Counter(pho_mismatches)
     c_other = Counter(other_mismatches)
     # Each Counter.most_common() returns [(pid, count), ...]
-    # Formatted tables
-    output += '\n--- MU+ ---\n'
-    output += format_pid_freq_table(c_mup.most_common())
+    # Formatted tables for each particle type
+    output += format_pid_freq_table('MU+', c_mup.most_common())
 
-    output += '\n--- MU- ---\n'
-    output += format_pid_freq_table(c_mum.most_common())
+    output += format_pid_freq_table('MU-', c_mum.most_common())
 
-    output += '\n--- PHOTON ---\n'
-    output += format_pid_freq_table(c_pho.most_common())
+    output += format_pid_freq_table('PHOTON', c_pho.most_common())
 
-    output += '\n--- OTHER ---\n'
-    output += format_pid_freq_table(c_other.most_common())
-    output += '-'*80 + '\n'
-    
+    output += format_pid_freq_table('OTHER', c_other.most_common())
+    output += '─' * W + '\n'
+
     # Verbose output
+    W = 120  # Wider line width for verbose output
     verbose_output = ''
     if verbose:
-        verbose_output += 'Verbose candidate information:\n'
+        verbose_output += '═' * W + '\n'
+        verbose_output += f"{'Verbose candidate information':^{W}}\n"
+        verbose_output += '═' * W + '\n'
         for can in candidates:
             verbose_output += f'\nEvent {can.evt}, Candidate {can.can_idx}:\n'
             for dtr in can.dtrs:
-                verbose_output += f'- Daughter PID {dtr.prt_pid:3d}, '
+                verbose_output += f'  Daughter PID {dtr.prt_pid:3d}, '
                 verbose_output += f'Gen idx {dtr.prt_idx_gen:2d}, '
                 verbose_output += f'MC PID {dtr.mc_pid:5d}, '
                 verbose_output += f'MC mom idx {dtr.mc_idx_mom:2d}, '
                 verbose_output += f'Error type: {dtr.err_type}\n'
-        verbose_output += '-'*80 + '\n'
-        verbose_output += error_log
+        verbose_output += '─' * W + '\n'
 
     return output, verbose_output
 
 
-#-------------------------------------------------------------------------------
+#───────────────────────────────────────────────────────────────────────────────
+def get_pid_mismatch_analytics(rows: list[tuple[int, int]]):
+    """
+    Get list of PID mismatches ranked by frequency for a given particle type and
+    store to a dict for JSON output.
+    """
+    sub_analytics = {}
+    for pid, count in rows: sub_analytics[pid] = count
+    return sub_analytics
 
+#───────────────────────────────────────────────────────────────────────────────
+def get_json_analytics(verbose=False):
+    """
+    Return analytics in a JSON-serializable dict format.
+    """
+    # Basic counts
+    analytics = {
+        'total_candidates': ncan,
+        'total_signal': nsig,
+        'total_background': nbkg
+    }
+    # Background error counts
+    for err in err_counters:
+        # Remove ErrorType. prefix for display
+        label = str(err).strip('ErrorType.') + ':'
+        counter = err_counters[err]
+        analytics[label] = counter
+    # Background error rates
+    # P(dimuon error | muon error) = N(muon & dimuon) / N(muon)
+    prob_dimu_given_mu = err_counters[ErrorType.DIMUON_ERROR] / \
+                         max(err_counters[ErrorType.MUP_ERROR], 
+                         err_counters[ErrorType.MUM_ERROR], 1)
+    # P(muon error)
+    prob_mu = (err_counters[ErrorType.MUP_ERROR] / ncan,
+               err_counters[ErrorType.MUM_ERROR] / ncan)
+    # P(photon error)
+    prob_pho = err_counters[ErrorType.PHOTON_ERROR] / ncan
+    analytics['error_rates'] = {
+        'P(dimuon error | muon error)': prob_dimu_given_mu,
+        'P(mu+ error)': prob_mu[0],
+        'P(mu- error)': prob_mu[1],
+        'P(photon error)': prob_pho
+    }
+    # List of MC pids causing mismatches
+    c_mup = Counter(mup_mismatches)
+    c_mum = Counter(mum_mismatches)
+    c_pho = Counter(pho_mismatches)
+    c_other = Counter(other_mismatches)
+    analytics['pid_mismatches'] = {
+        'MU+': get_pid_mismatch_analytics(c_mup.most_common()) if c_mup else None,
+        'MU-': get_pid_mismatch_analytics(c_mum.most_common()) if c_mum else None,
+        'PHOTON': get_pid_mismatch_analytics(c_pho.most_common()) if c_pho else None,
+        'OTHER': get_pid_mismatch_analytics(c_other.most_common()) if c_other else None
+    }
+
+    # Verbose candidate-level information
+    verbose_analytics = None
+    if verbose:
+        verbose_analytics = {}
+        verbose_analytics['candidates'] = []
+        for can in candidates:
+            can_info = {
+                'event': can.evt,
+                'candidate_index': can.can_idx,
+                'has_dimu_mismatch': can.has_dimu_mismatch,
+                'has_dimu_err': can.has_dimu_err,
+                'daughters': []
+            }
+            for dtr in can.dtrs:
+                dtr_info = {
+                    'prt_pid': dtr.prt_pid,
+                    'prt_idx_gen': dtr.prt_idx_gen,
+                    'mc_pid': dtr.mc_pid,
+                    'mc_idx_mom': dtr.mc_idx_mom,
+                    'err_type': str(dtr.err_type)
+                }
+                can_info['daughters'].append(dtr_info)
+            verbose_analytics['candidates'].append(can_info)
+
+    return analytics, verbose_analytics
+
+
+#───────────────────────────────────────────────────────────────────────────────
 # Print or write analytics to file
 output, verbose_output = get_analytics(verbose=verbose)
+analytics, verbose_analytics = get_json_analytics(verbose=verbose)
 print(output)
-with open(outfile, 'w') as f:
+# Write text output to file
+with open(outfile + '.txt', 'w') as f:
     f.write('') # Clear file contents
     f.write(output)
-    f.write('\n' + verbose_output)
-print(f'Background analysis results written to {outfile} file.')
+    if verbose: f.write('\n' + verbose_output)
+with open(outfile + '.json', 'w') as f:
+    json.dump(analytics, f, indent=2)
+    if verbose: json.dump(verbose_analytics, f, indent=2)
+print(f'[done] Background analysis results saved to: {outfile}')
