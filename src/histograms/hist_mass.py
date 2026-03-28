@@ -15,27 +15,14 @@
 '''
 
 import ROOT
-from utils.create_histograms import create_histograms
-import argparse
+from anaroot.src.utils.histograms import create_histograms
+from anaroot.src.utils.io import parse_hist_args
 
-parser = argparse.ArgumentParser()
-parser.add_argument(
-    '-i', '--infile',
-    help='Input ROOT file'
-)
-parser.add_argument(
-    '-s', '--signal',
-    action='store_true',
-    help='Use signal file'
-)
-args = parser.parse_args()
-
-infile = args.infile
-# Put outfile in hist/ directory, signal/ if signal file, minbias/ if minbias
-# file, with fixed name
-if infile is not None:
-    if args.signal: outfile = 'hist/signal/hist_mass.root'
-    else: outfile = 'hist/minbias/hist_mass.root'
+# Parse command line arguments for input file, output file, and decay mode
+infile, outfile, decay = parse_hist_args('mass')
+if decay == 'eta2mumu': ndtr = 2
+elif decay == 'eta2mumugamma': ndtr = 3
+else: raise ValueError(f'Invalid decay mode: {decay}')
 
 print(f'Reading from {infile}, writing to {outfile}.')
 
@@ -97,7 +84,7 @@ for entryIdx in range(0, tree.GetEntries()):
         if mc_pid[0] != 221: is_signal = False
         if tag_pid[i] != 221: continue  # skip failed reco/non-eta candidates
         # Bounds check: skip candidates with incomplete daughter info
-        j0, j1 = i*3, i*3+3
+        j0, j1 = i*ndtr, i*ndtr+ndtr
         if j1 > len(prt_pid) or j1 > len(prt_idx_gen) or j1 > len(prt_idx_mom):
             continue
         # Loop for each daughters of candidate

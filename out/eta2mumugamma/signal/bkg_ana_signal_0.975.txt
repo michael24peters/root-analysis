@@ -1,0 +1,99 @@
+========================= Background Analysis Results ==========================
+*_MISMATCH: Daughter has MC match but reco pid does not match gen pid.
+*_ERROR: Daughter has MC match but did reco did not match to candidate gen dtr.
+--------------------------------------------------------------------------------
+Total candidates processed:  11297
+Total signal candidates:      6059
+Total background candidates:  5238
+--------------------------------------------------------------------------------
+Background error counts:
+- MUP_PID_MISMATCH:             49
+- MUP_ONLY_PID_MISMATCH:        48
+- MUM_PID_MISMATCH:             49
+- MUM_ONLY_PID_MISMATCH:        48
+- DIMUON_PID_MISMATCH:           1
+- PHOTON_PID_MISMATCH:         413
+- MUP_ERROR:                  2773
+- MUP_ONLY_ERROR:               48
+- MUM_ERROR:                  2761
+- MUM_ONLY_ERROR:               48
+- DIMUON_ERROR:               2737
+- PHOTON_ERROR:               4776
+- OTHER_ERROR:                   0
+--------------------------------------------------------------------------------
+Background error rates:
+- P(dimuon error | muon error) = 98.70
+- P(mu+ error)                 = 24.55
+- P(mu- error)                 = 24.44
+- P(photon error)              = 42.28
+--------------------------------------------------------------------------------
+List of PID mismatches (ranked by frequency):
+
+--- MU+ ---
++------+----+
+|  PID | #  |
+| ---- | -- |
+|  211 | 15 |
+|   13 | 8  |
+|   22 | 6  |
+|  221 | 4  |
+|  -11 | 3  |
+|  111 | 3  |
+|   11 | 3  |
+|  321 | 2  |
+| -211 | 2  |
+| -431 | 2  |
+| -311 | 1  |
++------+----+
+
+--- MU- ---
++------+----+
+|  PID | #  |
+| ---- | -- |
+| -211 | 20 |
+|  -13 | 6  |
+| 3312 | 5  |
+|  211 | 5  |
+|  221 | 4  |
+| -321 | 4  |
+| -311 | 2  |
+|   22 | 1  |
+|  -11 | 1  |
+|   11 | 1  |
++------+----+
+
+--- PHOTON ---
++-------+-----+
+|   PID | #   |
+| ----- | --- |
+|   -11 | 111 |
+|    11 | 80  |
+|   111 | 51  |
+| -2112 | 35  |
+|  2112 | 21  |
+|   211 | 19  |
+|  -211 | 19  |
+|   130 | 12  |
+|     4 | 12  |
+|   311 | 11  |
+|    -4 | 10  |
+|  -321 | 6   |
+| -2212 | 4   |
+|  -311 | 3   |
+|   321 | 3   |
+|   331 | 3   |
+|  2212 | 3   |
+|  3122 | 2   |
+|   -13 | 2   |
+|    13 | 1   |
+|   310 | 1   |
+|   433 | 1   |
+|   223 | 1   |
+| 20223 | 1   |
+|    -5 | 1   |
++-------+-----+
+
+--- OTHER ---
+(none)
+--------------------------------------------------------------------------------
+

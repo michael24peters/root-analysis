@@ -6,21 +6,9 @@
 # ratio.
 
 import ROOT
-import sys
+from anaroot.src.utils.io import parse_plot_args
 
-# Optional command line arguments: include legend, include stats box.
-# By default, no legend or stats box.
-include_legend, include_stats, sig_file = False, False, False
-if len(sys.argv) > 1:
-    if 'legend' in sys.argv[1:]: include_legend = True
-    if 'stats' in sys.argv[1:]: include_stats = True
-    if 'signal' in sys.argv[1:]: sig_file = True
-if sig_file:
-    infile = 'hist/signal/hist_mass.root'
-    fileheader = 'figs/signal/tag_mass'
-else:
-    infile = 'hist/minbias/hist_mass.root'
-    fileheader = 'figs/minbias/tag_mass'
+infile, fileheader, decay, include_stats, include_legend = parse_plot_args('mass')
 
 print(f'Reading from {infile} and writing to {fileheader}_*.png')
 

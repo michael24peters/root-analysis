@@ -2,40 +2,31 @@
 # Script to make mass plots from histograms and save to png files              #
 # Author: Michael Peters                                                       #
 ################################################################################
-
 # consider:
 # pull plot: see example, either do difference / bin error OR ratio
 
 import ROOT
-import sys
+from anaroot.src.utils.io import parse_plot_args
 
-# Optional command line argument: include stats box (none by default)
-include_stats = False
-sig_file = False
-if len(sys.argv) > 1:
-    if 'stats' in sys.argv[1:]: include_stats = True
-    if 'signal' in sys.argv[1:]: sig_file = True
+infile, fileheader, decay, include_stats, _ = parse_plot_args('rec')
 
-if sig_file:
-    infile = 'hist/signal/hist_gen.root'
-    fileheader = 'figs/signal/'
-else: 
-    infile = 'hist/minbias/hist_gen.root'
-    fileheader = 'figs/minbias/'
-
-print(f'Reading from {infile} and writing to {fileheader}*.png')
+print(f'Reading from {infile} and writing to {fileheader}_*.png')
 
 tfile = ROOT.TFile.Open(infile, 'READ')
 
 # Get histograms from TFile
-hpid = tfile.Get('mc_pid')
-hm = tfile.Get('mc_m')
-hp = tfile.Get('mc_p')
-hpt = tfile.Get('mc_pt')
-hpz = tfile.Get('mc_pz')
+htpid = tfile.Get('tag_pid')
+htm = tfile.Get('tag_m')
+htp = tfile.Get('tag_p')
+htpt = tfile.Get('tag_pt')
+htpz = tfile.Get('tag_pz')
+hppid = tfile.Get('prt_pid')
+hpp = tfile.Get('prt_p')
+hppz = tfile.Get('prt_pz')
+hppt = tfile.Get('prt_pt')
 
 # Configure histogram
-for hist in (hpid, hm, hp, hpt, hpz):
+for hist in (htpid, htm, htp, htpt, htpz, hppid, hpp, hppz, hppt):
     # hist.Sumw2()  # statistical uncertainties by sum of weights squared
     # Keep histogram in memory (not remove when files are closed)
     hist.SetDirectory(0)
@@ -50,28 +41,31 @@ canvas = ROOT.TCanvas('canvas')
 canvas.cd()
 
 # Draw each histogram separately
-hists = [hpid, hp,
-         hm,
-         hpt, hpz]
-titles = ['mc pid', 'mc momentum',
-          'mc mass',
-          'mc transverse momentum', 'mc pz']
-names = ['mc_pid', 'mc_p', 
-         'mc_m', 
-         'mc_pt', 'mc_pz']
+hists = [htpid, htp, 
+         htpt, htpz,
+         htm,
+         hppid, hpp, 
+         hppt, hppz]
+titles = ['reconstructed tag pid', 'reconstructed tag momentum', 
+          'reconstructed tag transverse momentum', 'reconstructed tag pz',
+          'reconstructed tag mass',
+          'reconstructed daughter pid', 'reconstructed daughter momentum', 
+          'reconstructed daughter transverse momentum', 'reconstructed daughter pz']
+names = ['tag_pid', 'tag_p', 
+         'tag_pt', 'tag_pz', 
+         'tag_m',
+         'prt_pid', 'prt_p', 
+         'prt_pt', 'prt_pz']
 
 for hist, name, title in zip(hists, names, titles):
     hist.SetTitle(title)
-    # Include special formatting for specific histograms to look nice
-    if name == 'mc_m': hist.GetXaxis().SetTitle("Mass [MeV]")
-    elif name in ['mc_pid']: hist.GetXaxis().SetTitle("Particle ID")
-    if name == 'mc_pid': hist.GetXaxis().SetRangeUser(-14.5, 223.5)
-    if name == 'mc_m': hist.GetXaxis().SetRangeUser(546.5, 549.5)
+    if name == 'tag_m': hist.GetXaxis().SetTitle("Mass [MeV]")  # special case
+    elif name in ['prt_pid', 'tag_pid']: hist.GetXaxis().SetTitle("Particle ID")  # special case
     hist.Draw('h')
     if include_stats:
         hist.SetStats(1)
         canvas.Update()  # Ensure stats box is created
-        if name == 'mc_pid':
+        if name == 'prt_pid':
             # Shift to top middle third of plot
             stat = hist.GetListOfFunctions().FindObject("stats")
             stat.SetX1NDC(0.28)
@@ -84,4 +78,4 @@ for hist, name, title in zip(hists, names, titles):
 # Clear the canvas
 canvas.Clear()
 
-print(f'Done: wrote plots to {fileheader}gen*.png')
+print(f'Done: wrote plots to {fileheader}*.png')

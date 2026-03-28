@@ -7,16 +7,18 @@
 *.tiff
 *.bmp
 
-# figs/ directory
-figs/*
+# root files
+*.root
 
 # root files directory
 ntuple/*
-red/*
-*.root
 
-# hist/ directory
-hist/*
+# outputs/ directory
+outputs/*
+out/*
+
+# old/ directory
+old/*
 
 # Temporary files
 *.log
@@ -27,8 +29,9 @@ hist/*
 *.pdf
 *.synctex.gz
 
-# out/ directory
-out/*
-
-# old/ directory
-old/*
+# Python cache files
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
