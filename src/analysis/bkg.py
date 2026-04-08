@@ -1,5 +1,5 @@
 # ╔════════════════════════════════════════════════════════════════════════════╗
-# ║ Script to analyze background.                                              ║
+# ║ Script to analyze background for eta -> mu+ mu- (gamma).                   ║
 # ║ Author: Michael Peters                                                     ║
 # ╚════════════════════════════════════════════════════════════════════════════╝
 
@@ -15,7 +15,9 @@ import json
 import logging
 
 def parse_args():
-    # Parse command line arguments
+    """
+    Parse command line arguments.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--infile', required=True,
                         help = 'Input ROOT file')
@@ -50,6 +52,7 @@ class ErrorType(str, Enum):
     PHOTON_ERROR = 'PHOTON_ERROR'
     OTHER_ERROR = 'OTHER_ERROR'
 
+# Data class to hold daughter information for a candidate
 @dataclass
 class Daughter:
     prt_pid: int
@@ -58,6 +61,7 @@ class Daughter:
     mc_idx_mom: int | None
     err_type: ErrorType
 
+# Data class to hold per candidate information for analytics
 @dataclass
 class Candidate:
     is_sig: bool
@@ -67,6 +71,7 @@ class Candidate:
     has_dimu_mismatch: bool
     has_dimu_err: bool
 
+# Data class to hold overall analytics results for output
 @dataclass
 class Analytics:
     ncan: int
@@ -173,12 +178,14 @@ def classify_candidate(entryIdx, i, prt_pid, prt_idx_gen, prt_idx_mom, mc_pid, m
         # Correctly matched dtr of signal candidate
         else: err_type = None
 
+        # Add daughter to list
         try: 
             dtrs.append(Daughter(prt_pid=prt_pid[j],
                 prt_idx_gen=prt_idx_gen[j],
                 mc_pid=mc_pid[prt_idx_gen[j]],
                 mc_idx_mom=mc_idx_mom[prt_idx_gen[j]],
                 err_type=err_type))
+        # Handles any indexing issues which can arise for various reasons
         except IndexError: 
             dtrs.append(Daughter(prt_pid=prt_pid[j],
                 prt_idx_gen=prt_idx_gen[j],
@@ -187,6 +194,8 @@ def classify_candidate(entryIdx, i, prt_pid, prt_idx_gen, prt_idx_mom, mc_pid, m
                 err_type=err_type))
             logging.warning(f'Event {entryIdx}, Candidate {i} has incomplete daughter info.')
 
+    # Return Candidate object with all reco-to-gen matching and background
+    # classification
     return Candidate(is_sig=is_signal,
                      evt=entryIdx,
                      can_idx=i,
@@ -236,6 +245,7 @@ def run_event_loop(args):
         ntags = len(tag_pid)
         if ntags == 0: continue
         
+        # Get per-candidate-level information and background analysis
         for i in range(ntags):
             if tag_pid[i] != 221: continue  # skip failed reco/non-eta candidates
             candidate = classify_candidate(entryIdx, i, prt_pid, prt_idx_gen, 
@@ -253,22 +263,33 @@ def get_analytics(candidates: list[Candidate]) -> Analytics:
     Returns an Analytics dataclass object containing all relevant info for text
     and JSON output.
     """
+    # List of all error types
     ERROR_TYPES = list(ErrorType)
+    # Counters
     err_counters = {err: 0 for err in ERROR_TYPES}
     mup_mismatches, mum_mismatches, pho_mismatches, other_mismatches = [], [], [], []
     mup_mismatch_only_count, mum_mismatch_only_count = 0, 0
     mup_err_only_count, mum_err_only_count = 0, 0
+
+    # Signal (and background) candidates
     nsig = sum(1 for c in candidates if c.is_sig)
 
+    # Count errors
     for can in candidates:
+        # Dimuon error conditions are on a per-candidate basis
         if can.has_dimu_mismatch:
             err_counters[ErrorType.DIMUON_PID_MISMATCH] += 1
         if can.has_dimu_err:
             err_counters[ErrorType.DIMUON_ERROR] += 1
+        # Count per-daughter-level errors
         for dtr in can.dtrs:
+            # Skip signal, add background
             if dtr.err_type is None: continue
+            # TODO: Doesn't this handle everything except dimuon errors? Might
+            # be able to simplify this.
             err_counters[dtr.err_type] += 1
             # Append to mismatch lists for pid frequency tables
+            # PID mismatch errors
             if dtr.err_type == ErrorType.MUP_PID_MISMATCH:
                 mup_mismatches.append(dtr.mc_pid)
                 if not can.has_dimu_mismatch:
@@ -277,6 +298,7 @@ def get_analytics(candidates: list[Candidate]) -> Analytics:
                 mum_mismatches.append(dtr.mc_pid)
                 if not can.has_dimu_mismatch:
                     mum_mismatch_only_count += 1
+            # Other errors
             elif dtr.err_type == ErrorType.MUP_ERROR:
                 if not can.has_dimu_err:
                     mup_err_only_count += 1
@@ -293,9 +315,13 @@ def get_analytics(candidates: list[Candidate]) -> Analytics:
     err_counters[ErrorType.MUP_ONLY_ERROR] = mup_err_only_count
     err_counters[ErrorType.MUM_ONLY_ERROR] = mum_err_only_count
 
+    # Useful values for probability calculations
     ncan = len(candidates)
-    denom_mu = max(err_counters[ErrorType.MUP_ERROR], err_counters[ErrorType.MUM_ERROR], 1)
+    denom_mu = max(err_counters[ErrorType.MUP_ERROR],
+                   err_counters[ErrorType.MUM_ERROR], 
+                   1)
 
+    # Return Analytics object with all relevant info for output
     return Analytics(
         ncan=ncan,
         nsig=nsig,
@@ -326,16 +352,13 @@ def format_pid_freq_table(label, rows: list[tuple[int, int]]) -> str:
     out = ''
     if not rows: return out
 
-    # Determine column widths based on label and data
-    label_w = len(label)
+    # Determine column widths based on data
     pid_w = max(len(" PID "), max(len(str(pid)) for pid, _ in rows))
     cnt_w = max(len(" # "), max(len(str(cnt)) for _, cnt in rows))
     
-    # Label should look like '\n───── MU- ─────\n' but with dynamic width based
-    # on label
     # Label
-    out += f'\n{"═" * ((pid_w + cnt_w + 5 - label_w) // 2)} {label} ' + \
-           f'{"═" * ((pid_w + cnt_w + 5 - label_w) // 2)}\n'
+    if label == 'PHOTON': out += f'\n{"═" * 4} {label} ' + f'{"═" * 4}\n'
+    else: out += f'\n{"═" * 5} {label} ' + f'{"═" * 5}\n'
     # Header
     out += f"┌─{' PID ':>{pid_w}}─┬─{' # ':<{cnt_w}}─┐\n"
     out += f"├─{'─' * pid_w}─┼─{'─' * cnt_w}─┤\n"
@@ -353,21 +376,25 @@ def format_text(result: Analytics, verbose: bool, candidates: list[Candidate]) -
     particle type. If verbose=True, also include candidate-level information and
     error log. Designed for printing to console or writing to text file.
     """
+    # Header
     W = 48
     out = '═' * W + '\n'
     out += f"{'Background analysis results':^{W}}\n"
     out += '═' * W + '\n'
     out += '  *_MISMATCH: Daughter has MC match but reco\n    pid does not match gen pid.\n'
     out += '  *_ERROR: Daughter has MC match but reco did\n    not match to candidate gen dtr.\n'
+    # High-level counts
     out += '─' * W + '\n'
     out += f'  {"Total candidates processed:":<31} {result.ncan:5d}\n'
     out += f'  {"Total signal candidates:":<31} {result.nsig:5d}\n'
     out += f'  {"Total background candidates:":<31} {result.nbkg:5d}\n'
+    # Error counts
     out += '─' * W + '\n'
     out += f"{'Background error counts':^{W}}\n"
     out += '─' * W + '\n'
     for err, count in result.err_counters.items():
         out += f'  {err.name + ":":<31} {count:5d}\n'
+    # Error rates
     out += '─' * W + '\n'
     out += f"{'Background error rates':^{W}}\n"
     out += '─' * W + '\n'
@@ -376,17 +403,20 @@ def format_text(result: Analytics, verbose: bool, candidates: list[Candidate]) -
     out += f'  P(mu- error)                 = {result.prob_mum_err:.4f}\n'
     out += f'  P(photon error)              = {result.prob_pho_err:.4f}\n'
     out += '─' * W + '\n'
+    # PID mismatch frequency tables per daughter
     out += f"{'List of PID mismatches (ranked by frequency)':^{W}}\n"
     out += '─' * W + '\n'
     for label, rows in result.pid_freq.items():
         out += format_pid_freq_table(label, rows)
     out += '─' * W + '\n'
 
+    # Verbose candidate-level information
     if verbose:
         W = 120
         out += '═' * W + '\n'
         out += f"{'Verbose candidate information':^{W}}\n"
         out += '═' * W + '\n'
+        # event, cand index, dtr pid, gen idx, mc pid, mc mom idx, error type
         for can in candidates:
             out += f'\nEvent {can.evt}, Candidate {can.can_idx}:\n'
             for dtr in can.dtrs:
@@ -400,6 +430,12 @@ def format_text(result: Analytics, verbose: bool, candidates: list[Candidate]) -
 
 #───────────────────────────────────────────────────────────────────────────────
 def format_json(result: Analytics, verbose: bool, candidates: list[Candidate]) -> dict:
+    """
+    Return a formatted JSON dictionary of background analysis results, including
+    counts, error rates, and list of PID mismatches ranked by frequency for each
+    particle type. If verbose=True, also include candidate-level information and
+    error log.
+    """
     out = {
         'total_candidates': result.ncan,
         'total_signal':     result.nsig,
@@ -437,6 +473,7 @@ def format_json(result: Analytics, verbose: bool, candidates: list[Candidate]) -
 
 #───────────────────────────────────────────────────────────────────────────────
 def main():
+    # Parse command line arguments
     args = parse_args()
     # Set up logging
     logger = logging.getLogger(__name__)
@@ -449,7 +486,7 @@ def main():
     # Also print to stderr
     logging.getLogger().addHandler(logging.StreamHandler())
 
-    # Handle arguments, set up IO.
+    # Set up IO
     os.makedirs('out', exist_ok=True)
     if args.pnnmu_cut is not None:
         logging.info(f'Applying PROBNNmu cut: {args.pnnmu_cut}')
@@ -458,6 +495,7 @@ def main():
     # Run analysis
     candidates = run_event_loop(args)
     result = get_analytics(candidates)
+    # Get results as text string and JSON dictionary
     text_out = format_text(result, args.verbose, candidates)
     json_out = format_json(result, args.verbose, candidates)
     
