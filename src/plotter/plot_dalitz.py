@@ -11,7 +11,7 @@ import uproot
 
 def parse_args():
 
-    parser = argparse.ArgumentParser(description="Plot Dalitz plot from ROOT tree.")
+    parser = argparse.ArgumentParser(description="Dalitz plot from ROOT tree.")
     parser.add_argument("input", help="Input ROOT file")
     parser.add_argument(
         "--type", dest="plot_type", choices=["dalitz", "phsp"], default="dalitz",

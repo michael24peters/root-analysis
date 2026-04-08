@@ -10,7 +10,7 @@ import uproot
 
 def parse_args():
 
-    parser = argparse.ArgumentParser(description="Plot q^2 (mu+, mu-) plot from ROOT tree.")
+    parser = argparse.ArgumentParser(description="Plot q2 from ROOT tree.")
     parser.add_argument("input", help="Input ROOT file")
     return parser.parse_args()
 
@@ -48,7 +48,7 @@ es = branches["mc_e"]
 q2s = []
 
 for i in range(len(pids)):
-    p1 = p2 = p3 = None  # gamma, mu+, mu-
+    p1 = p2 = None  # mu+, mu-
 
     for j, pid in enumerate(pids[i]):
         # Convert from MeV to GeV
@@ -61,19 +61,14 @@ for i in range(len(pids)):
         # Don't overwrite if multiple candidates are found, since if that
         # happens, it's because there was a reconstruction error (i.e.,
         # background).
-        if pid == 22 and p1 is None: p1 = (px, py, pz, e)
-        elif pid == -13 and p2 is None: p2 = (px, py, pz, e)
-        elif pid == 13 and p3 is None: p3 = (px, py, pz, e)
+        if pid == -13 and p1 is None: p1 = (px, py, pz, e)
+        elif pid == 13 and p2 is None: p2 = (px, py, pz, e)
 
-    if None not in (p1, p2, p3):
-        q2 = invariant_mass2(*p2, *p3)  # m^2(mu+, mu-)
+    if None not in (p1, p2):
+        q2 = invariant_mass2(*p1, *p2)  # m^2(mu+, mu-)
         q2s.append(q2)
 
 q2s = np.array(q2s)
-
-print(f"[DEBUG] average q^2: {q2s.mean():.4f} GeV^2")
-print(f"[DEBUG] std q^2: {q2s.std():.4f} GeV^2")
-print(f"[DEBUG] median q^2: {np.median(q2s):.4f} GeV^2")
 
 print(f"[INFO] q2 range: [{q2s.min():.4f}, {q2s.max():.4f}]")
 
@@ -88,4 +83,4 @@ ax.grid(alpha=0.2)
 
 fig.tight_layout()
 fig.savefig(outfile, dpi=150)
-print(f"[DONE] q^2 histogram saved to {outfile}")
+print(f"[DONE] q2 histogram saved to {outfile}")
