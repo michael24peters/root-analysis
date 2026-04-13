@@ -74,7 +74,19 @@ print(f"[INFO] q2 range: [{q2s.min():.4f}, {q2s.max():.4f}]")
 
 # Plot 1d histogram of q^2
 fig, ax = plt.subplots(figsize=(7, 6))
-ax.hist(q2s, bins=100, range=(0.02, 0.30))
+ax.hist(q2s, bins=100, range=(0.04, 0.30))
+# Get bin edges and counts
+bin_edges = np.linspace(0.04, 0.30, 101)
+counts = np.histogram(q2s, bins=bin_edges)[0]
+# Save to JSON file
+import json
+json_outfile = "out/q2_histogram.json"  
+with open(json_outfile, "w") as f:
+    json.dump({
+        "bin_edges": bin_edges.tolist(),
+        "counts": counts.tolist()
+    }, f, indent=4)
+print(f"[DONE] q2 histogram data saved to {json_outfile}")
 
 ax.set_xlabel(r"$q^2 (m^2_{\mu^+,\mu^-})$ [GeV$^2$]")
 ax.set_ylabel("Counts")
