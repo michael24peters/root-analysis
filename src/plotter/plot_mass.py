@@ -1,262 +1,64 @@
 ################################################################################
-# Script to make mass plots from histograms and save to png files              #
+# Script to make mass plots from root file.                                    #
+# Usage: python plot_mass.py input.root [output.png]                           #
 # Author: Michael Peters                                                       #
 ################################################################################
-# TODO: consider pull plot. See tutorial; either do difference / bin error OR 
-# ratio.
 
-import ROOT
-from anaroot.src.utils.io import parse_plot_args
+import argparse
+import uproot
+import numpy as np
+import matplotlib.pyplot as plt
 
-infile, fileheader, decay, include_stats, include_legend = parse_plot_args('mass')
+# IO
+parser = argparse.ArgumentParser(description='Plot mass distributions from ROOT file')
+parser.add_argument("input", 
+                    help="Input ROOT file")
+parser.add_argument("output", nargs="?", default="mass_plot.png",
+                    help="Output PNG file (default: mass_plot.png)")
+args = parser.parse_args()
+print(f"Reading from {args.input} and writing to {args.output}.")
 
-print(f'Reading from {infile} and writing to {fileheader}_*.png')
+# Get mass info as numpy array
+with uproot.open(args.input) as f:
+    tree = f["tree"]
+    # Convert to numpy array
+    tag_m = tree["tag_m"].array(library="np") 
 
-tfile = ROOT.TFile.Open(infile, 'READ')
+# Get lengths of arrays in tag_m to see how many candidates per event
+lengths = np.array([len(x) for x in tag_m])
+print(f"{'─' * 48}")
+print(f"Events with 0 candidates: {np.sum(lengths == 0)}")
+print(f"Events with 1 candidate:  {np.sum(lengths == 1)}")
+# TODO: Any events with 2+ candidates need to be handled in the future, as 
+# flattening will mix candidates from different events. For now, we just print
+# them out and don't worry about it, but in the future we will want to do "best 
+# candidate" selection (e.g., the one closest to the eta mass) or somehow index
+# candidates by event to distinguish this.
+print(f"Events with 2+ candidates: {np.sum(lengths >= 2)}")
+print(f"Events with 3+ candidates: {np.sum(lengths >= 3)}")
+print(f"Max candidates in an event: {lengths.max()}")
+print(f"{'─' * 48}")
 
-# Get histograms from TFile
-print("Getting histograms...")  # debug
-hsig = tfile.Get('sig')
-hbkg = tfile.Get('bkg')
-htot = tfile.Get('tot')
+# Flatten array of arrays
+tag_m = np.concatenate(tag_m)  # flatten array of arrays
+print(f"Read {len(tag_m)} entries from {args.input}")
+print(f"shape: {tag_m.shape}")
+print(f"dtype: {tag_m.dtype}")
+print(f"min: {tag_m.min():.2f}")
+print(f"max: {tag_m.max():.2f}")
+print(f"{'─' * 48}")
 
-# Configure histogram
-for hist in (hbkg, hsig, htot):
-    # hist.Sumw2()  # statistical uncertainties by sum of weights squared
-    # Keep histogram in memory (not remove when files are closed)
-    hist.SetDirectory(0)
-    hist.SetStats(0)
-    hist.GetXaxis().SetTitle("Mass [MeV]")
-    hist.GetYaxis().SetTitle("Events")
-
-# Histogram styling
-# Signal styling - black points with error bars
-hsig.SetMarkerStyle(20)  # filled circle
-hsig.SetMarkerSize(.5)
-hsig.SetLineWidth(1)
-hsig.SetLineColor(ROOT.kBlack)
-hsig.SetMarkerColor(ROOT.kBlack)
-
-# Background styling - gray fill
-hbkg.SetFillStyle(1001)
-hbkg.SetFillColor(ROOT.kGray+1)
-hbkg.SetLineColor(ROOT.kGray+1)
-
-# Total styling - black histogram
-htot.SetFillStyle(1001)
-htot.SetFillColor(ROOT.kBlack)
-htot.SetLineColor(ROOT.kBlack)
-
-# Create canvas
-canvas = ROOT.TCanvas('canvas')
-canvas.cd()
-
-
-# =============================================================================
-
-# Configure legend
-def draw_legend(hsig=None, hbkg=None):
-    print("Drawing legend...")  # debug
-    # Place legend in top-right corner partially inside plot area
-    # (xlow, ylow, xup, yup)
-    leg = ROOT.TLegend(0.79, 0.78, 0.98, 0.88)
-    leg.SetTextSize(0.03)
-    leg.SetBorderSize(0)  # 0: remove border
-    # leg.SetFillStyle(0)  # 0: transparent background
-    if hsig: leg.AddEntry(hsig, "Signal", "l")  # l: line
-    if hbkg: leg.AddEntry(hbkg, "Background", "f")  # f: fill
-    leg.Draw()
-    return leg
-
-# =============================================================================
-# Draw each histogram separately
-
-print("Drawing individual histograms...")  # debug
-
-# Signal
-hsig.SetTitle('signal tag mass')
-hsig.Draw('pe1x0')  # p e 1 x0 : points; error bars; error bar lines; no x bars
-if include_stats: hsig.SetStats(1)
-canvas.Print(f'{fileheader}_sig.png')
-
-# Background
-hbkg.SetTitle('background tag mass')
-hbkg.Draw('h')  # h: histogram
-if include_stats: hbkg.SetStats(1)
-canvas.Print(f'{fileheader}_bkg.png')
-
-# Clear custom configs
-for hist in (hbkg, hsig):
-    hist.SetStats(0)
-    hist.SetTitle('')
-# Clear the canvas
-canvas.Clear()
-
-# =============================================================================
-# Combine histograms and stack them on one canvas
-
-# htot used instead of hsig since it includes both signal and background, and
-# when background is superimposed only the signal will remain, creating the
-# appearance of a stacked histogram.
-
-print("Drawing stacked histogram...")  # debug
-
-# Title on combined plot
-hbkg.SetTitle('tag mass')
-
-# Find the largest y value among all histograms
-def get_max_with_error(hist, err=False, margin=1):
-    max_val = -float('inf')
-    for i in range(1, hist.GetNbinsX()+1):
-        val = hist.GetBinContent(i)
-        bin_err = hist.GetBinError(i) if err else 0
-        if val + bin_err > max_val:
-            max_val = val + bin_err
-    # Add a small margin to avoid clipping error bars
-    return max_val + margin
-
-# Find combined max y value considering error bars
-ymax = get_max_with_error(htot, err=True) + get_max_with_error(hbkg, margin=0)
-
-# Set the maximum for all histograms to ensure consistent y range
-for hist in (htot, hbkg):
-    hist.SetMaximum(ymax)
-    hist.SetMinimum(0)
-
-htot.Draw('h')
-hbkg.Draw('h, same')
-if include_legend: leg = draw_legend(hsig=htot, hbkg=hbkg)
-# Save canvas to file
-canvas.Print(f'{fileheader}_stacked.png')
-
-# Clear the canvas
-# Reset formatting
-for hist in (htot, hbkg):
-    hist.SetMaximum()
-    hist.SetMinimum()
-canvas.Clear()
-
-# # =============================================================================
-# # Draw all histograms on one canvas
-
-# print("Drawing combined histogram...")  # debug
-
-# # Title on combined plot
-# hbkg.SetTitle('combined tag mass')
-
-# # Find the largest y value among all histograms
-# def get_max_with_error(hist, err=False, margin=1):
-#     max_val = -float('inf')
-#     for i in range(1, hist.GetNbinsX()+1):
-#         val = hist.GetBinContent(i)
-#         bin_err = hist.GetBinError(i) if err else 0
-#         if val + bin_err > max_val:
-#             max_val = val + bin_err
-#     # Add a small margin to avoid clipping error bars
-#     return max_val + margin
-
-# # Find maximum y value considering error bars for signal
-# ymax = max(get_max_with_error(hsig, err=True), get_max_with_error(hbkg))
-
-# # Set the maximum for all histograms to ensure consistent y range
-# for hist in (hsig, hbkg):
-#     hist.SetMaximum(ymax)
-#     hist.SetMinimum(0)
-
-# hbkg.Draw('h')
-# hsig.Draw('pe1x0, same')
-# if include_legend: leg = draw_legend(hsig=hsig, hbkg=hbkg)
-# # Save canvas to file
-# canvas.Print(f'{fileheader}_combined.png')
-
-# # Clear the canvas
-# # Reset formatting
-# for hist in (hsig, hbkg):
-#     hist.SetMaximum()
-#     hist.SetMinimum()
-# canvas.Clear()
-
-# # =============================================================================
-# # Draw histograms on split-panel canvas
-
-# print("Drawing split-panel histogram...")  # debug
-
-# # Format histograms
-# # Top plot should have y axis ticks to only be integers, y axis label, no x axis label, 
-
-# # Title on top plot
-# hsig.SetTitle('signal vs background tag mass')
-# ROOT.gStyle.SetTitleFontSize(0.07)
-# # No title on bottom plot
-# hbkg.SetTitle('')
-
-# # Top pad (70% of canvas)
-# # Set axes labels and value sizes
-# pad1_label_size = 0.04
-# pad1_title_size = 0.04
-# hsig.GetXaxis().SetTitleSize(pad1_title_size)
-# hsig.GetYaxis().SetTitleSize(pad1_title_size)
-# hsig.GetXaxis().SetLabelSize(pad1_label_size)
-# hsig.GetYaxis().SetLabelSize(pad1_label_size)
-
-# # Bottom pad (30% of canvas)
-# # Set axes labels and value sizes
-# pad2_label_size = 0.12
-# pad2_title_size = 0.12
-# hbkg.GetXaxis().SetTitleSize(pad2_title_size)
-# hbkg.GetYaxis().SetTitleSize(pad2_title_size)
-# hbkg.GetXaxis().SetLabelSize(pad2_label_size)
-# hbkg.GetYaxis().SetLabelSize(pad2_label_size)
-
-# # No x axis label on top plot
-# hsig.GetXaxis().SetTitle('')
-# # No y axis label on bottom plot
-# hbkg.GetYaxis().SetTitle('')
-
-# # Set y axis ticks to only be integers
-# hsig.GetYaxis().SetNdivisions(5)
-# hbkg.GetYaxis().SetNdivisions(4)
-
-# # Set up first pad - takes up top 70% of canvas
-# # Args: name, title, xlow, ylow, xup, yup
-# pad1 = ROOT.TPad('pad1', 'pad1', 0, 0.3, 1, 1)
-# pad1.Draw()
-# pad1.cd()
-# # Top margin larger to accommodate title
-# pad1.SetTopMargin(0.15)
-# # Bottom margin 0 to connect to bottom pad
-# pad1.SetBottomMargin(0)
-# # Draw signal to top pad
-# hsig.Draw('pe1x0')
-# if include_legend: leg = draw_legend(hsig=hsig, hbkg=hbkg)
-
-# # Remove 0 value label on y-axis top plot 
-# pad1.Update()
-# hsig.GetYaxis().ChangeLabel(1, -1, -1, -1, -1, -1, " ")
-
-# # Return to canvas level
-# canvas.cd()
-
-# # Set up second pad - takes up bottom 30% of canvas
-# # Args: name, title, xlow, ylow, xup, yup
-# pad2 = ROOT.TPad('pad2', 'pad2', 0, 0.05, 1, 0.3)
-# pad2.Draw()
-# pad2.cd()
-# # Formatting - top margin 0 to connect to top pad
-# pad2.SetTopMargin(0)
-# # Bottom margin larger to accommodate x-axis labels
-# pad2.SetBottomMargin(0.25)
-# # Draw background to bottom pad
-# hbkg.Draw('h')
-# canvas.Print(f'{fileheader}_split.png')
-
-# # Clear the canvas
-# canvas.Clear()
-
-# # Reset formatting
-# hbkg.SetFillColor(ROOT.kGray+1)
-# hbkg.SetLineColor(ROOT.kGray+1)
-# # Clear the canvas
-# canvas.Clear()
-
-print(f'Done: wrote plots to {fileheader}_*.png')
+# Plot
+print("Plotting histogram...")
+plt.rcParams['font.family'] = 'STIXGeneral'
+plt.rcParams['font.size'] = 16
+plt.figure(figsize=(12, 9))
+plt.hist(tag_m, bins=50, histtype='step', color='blue', label='Candidates')
+plt.axvline(x=547.86, color='red', linestyle='--', label='PDG Mass')
+plt.xlabel('Mass [MeV]')
+plt.ylabel('Candidates')
+plt.title('Eta Mass')
+plt.grid(alpha=0.3)
+plt.legend(frameon=False)
+plt.savefig(f"out/{args.output}", dpi=300)
+print(f"Saved plot to out/{args.output}")

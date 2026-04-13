@@ -6,6 +6,18 @@
 
 import ROOT
 import os
+import logging
+
+# Set up logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    filename=args.outfile + '.log'
+)
+# Also print to stderr
+logging.getLogger().addHandler(logging.StreamHandler())
 
 # User-inputted path to nested search ROOT files to concatenate
 print('Provide the base path containing the ROOT files to concatenate.')
@@ -16,10 +28,11 @@ if not input_path.endswith('/'): input_path += '/'
 # Now find all ROOT files in this path and its subdirectories
 infiles = []
 # Search the magup and magdown subdirectories within the provided path
+logging.info(f'Searching for ROOT files...')
 for subdir in ['magup', 'magdown']:
     dir = os.path.join(input_path, subdir)
     if not os.path.exists(dir):
-        print(f'Warning: Subdirectory {dir} does not exist. Skipping.')
+        logging.warning(f'Subdirectory {dir} does not exist. Skipping.')
         continue
     for root, _, files in os.walk(dir):
         for file in files:
@@ -28,10 +41,10 @@ for subdir in ['magup', 'magdown']:
 # Write outfile to base path
 outfile = os.path.join(input_path, 'combined_files.root')
 
-print(f'Concatenating files:')
+logging.info(f'Concatenating files:')
 for infile in infiles:
-    print(f' - {infile}')
-print(f'Into single output file: {outfile}')
+    logging.info(f' - {infile}')
+logging.info(f'Into single output file: {outfile}')
 
 # Create a TFileMerger to merge the files
 merger = ROOT.TFileMerger()
@@ -43,4 +56,4 @@ for infile in infiles:
     merger.AddFile(tfile)
 # Use ROOT's TFileMerger to merge the files
 merger.Merge()
-print(f'Successfully created {outfile}.')
+logging.info(f'Successfully created {outfile}.')

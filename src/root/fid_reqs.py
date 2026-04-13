@@ -2,9 +2,12 @@
 # Script to apply fiducial requirements (also calculates efficiencies).        #
 # Author: Michael Peters                                                       #
 ################################################################################
+# TODO: make this work for eta -> 4mu and eta -> 2mu 2e cases as well. Requires
+# more generalized code.
 
 import ROOT
 import argparse
+import logging
 
 #-------------------------------------------------------------------------------
 
@@ -58,12 +61,12 @@ def apply_fiducial_reqs(tree, gamma_flag):
 
     new_tree = tree.CloneTree(0)
 
-    print(f'Entries: {tree.GetEntries()}')
+    logging.info(f'Entries: {tree.GetEntries()}')
     for entryIdx in range(0, tree.GetEntries()):
         # Print status
         check_interval = 100000
         if entryIdx % check_interval == 0 and entryIdx > 0:
-            print(f'  - Processed {entryIdx:,d} events, kept {new_tree.GetEntries()}...')
+            logging.info(f'Processed {entryIdx:,d} events, kept {new_tree.GetEntries()}...')
         
         tree.GetEntry(entryIdx)
         
@@ -113,11 +116,19 @@ def apply_fiducial_reqs(tree, gamma_flag):
 
 #-------------------------------------------------------------------------------
 
-parser = argparse.ArgumentParser()
-parser.add_argument(
-    '-i', '--infile',
-    help='Input ROOT file'
+# Set up logging to stderr only
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
 )
+# Also print to stderr
+logging.getLogger().addHandler(logging.StreamHandler())
+
+# Parse command line arguments
+parser = argparse.ArgumentParser()
+parser.add_argument("infile", help="Input ROOT file")
 # eta -> mu+ mu- (gamma) flag
 parser.add_argument(
     '-g', '--gamma',
@@ -132,7 +143,7 @@ if infile is not None:
     outfile = '/'.join(infile.split('/')[:-1]) + '/fiducial_requirements.root'
 else: raise ValueError('Input file must be specified with -i or --infile flag.')
 # Output file name
-print(f'Reading from {infile}, writing to {outfile}.')
+logging.info(f'Reading from {infile}, writing to {outfile}.')
 
 tfile = ROOT.TFile.Open(infile, 'READ')
 tree = tfile.Get('tree')
@@ -143,7 +154,7 @@ new_tfile.cd()
 # Apply fiducial requirements
 new_tree = apply_fiducial_reqs(tree, args.gamma)
 
-print(f'Total kept entries: {new_tree.GetEntries()}')
+logging.info(f'Total kept entries: {new_tree.GetEntries()}')
 
 # Close input file
 tfile.Close()
@@ -152,4 +163,4 @@ tfile.Close()
 new_tree.Write()
 new_tfile.Close()
 
-print(f'Done: wrote reduced tree with fiducial requirements to {outfile}.')
+logging.info(f'Done: wrote reduced tree with fiducial requirements to {outfile}.')
