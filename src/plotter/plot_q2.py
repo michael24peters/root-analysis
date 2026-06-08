@@ -27,11 +27,17 @@ args = parse_args()
 outfile = "out/q2.png"
 print(f"[INFO] Reading from {args.input} and writing to {outfile}.")
 
+# Branches of interest
+IS_MC = False # True = MC | False = real data
+# MC
+if IS_MC: branches = ["mc_pid", "mc_px", "mc_py", "mc_pz", "mc_e"]
+else: branches = ["prt_pid", "prt_px", "prt_py", "prt_pz", "prt_e"]
+
 # Read tree with uproot.
 with uproot.open(args.input) as f:
     tree = f["tree"]
     branches = tree.arrays(
-        ["mc_pid", "mc_px", "mc_py", "mc_pz", "mc_e"],
+        branches,
         library="np"
     )
 
@@ -39,11 +45,19 @@ with uproot.open(args.input) as f:
 # mc contains all MC particles, including the eta and its daughters. We need to
 # loop over events and find the gamma, mu+, and mu- for each event to compute
 # the invariant masses.
-pids = branches["mc_pid"]
-pxs = branches["mc_px"]
-pys = branches["mc_py"]
-pzs = branches["mc_pz"]
-es = branches["mc_e"]
+# Reco contains only reconstructed particles, i.e., muons and photons, no eta.
+if IS_MC:
+    pids = branches["mc_pid"]
+    pxs = branches["mc_px"]
+    pys = branches["mc_py"]
+    pzs = branches["mc_pz"]
+    es = branches["mc_e"]
+else:
+    pids = branches["prt_pid"]
+    pxs = branches["prt_px"]
+    pys = branches["prt_py"]
+    pzs = branches["prt_pz"]
+    es = branches["prt_e"]
 
 q2s = []
 
@@ -74,9 +88,9 @@ print(f"[INFO] q2 range: [{q2s.min():.4f}, {q2s.max():.4f}]")
 
 # Plot 1d histogram of q^2
 fig, ax = plt.subplots(figsize=(7, 6))
-ax.hist(q2s, bins=100, range=(0.04, 0.30))
+ax.hist(q2s, bins=200, range=(0.04, 0.92))
 # Get bin edges and counts
-bin_edges = np.linspace(0.04, 0.30, 101)
+bin_edges = np.linspace(0.04, 0.92, 201)
 counts = np.histogram(q2s, bins=bin_edges)[0]
 # Save to JSON file
 import json

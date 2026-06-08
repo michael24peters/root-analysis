@@ -5,6 +5,7 @@
 #   python plot_dalitz.py input.root --type phsp
 
 import argparse
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 import uproot
@@ -29,14 +30,16 @@ def invariant_mass2(px1, py1, pz1, e1, px2, py2, pz2, e2):
 
 args = parse_args()
 
-outfile = "out/dalitz_dalitz.png" if args.plot_type == "dalitz" else "out/dalitz-phsp.png"
+# Output file path
+_out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "out")
+outfile = os.path.join(_out_dir, "dalitz_dalitz.png") if args.plot_type == "dalitz" else os.path.join(_out_dir, "dalitz-phsp.png")
 print(f"[INFO] Reading from {args.input} and writing to {outfile}.")
 
 # Read tree with uproot.
 with uproot.open(args.input) as f:
     tree = f["tree"]
     branches = tree.arrays(
-        ["mc_pid", "mc_px", "mc_py", "mc_pz", "mc_e"],
+        ["prt_pid", "prt_px", "prt_py", "prt_pz", "prt_e"],
         library="np"
     )
 
@@ -44,11 +47,11 @@ with uproot.open(args.input) as f:
 # mc contains all MC particles, including the eta and its daughters. We need to
 # loop over events and find the gamma, mu+, and mu- for each event to compute
 # the invariant masses.
-pids = branches["mc_pid"]
-pxs = branches["mc_px"]
-pys = branches["mc_py"]
-pzs = branches["mc_pz"]
-es = branches["mc_e"]
+pids = branches["prt_pid"]
+pxs = branches["prt_px"]
+pys = branches["prt_py"]
+pzs = branches["prt_pz"]
+es = branches["prt_e"]
 
 m12s = []
 m23s = []
@@ -82,7 +85,7 @@ print(f"m23 range: [{m23s.min():.4f}, {m23s.max():.4f}]")
 # Plot.
 fig, ax = plt.subplots(figsize=(7, 6))
 h, xedges, yedges = np.histogram2d(m12s, m23s, bins=100,
-                                    range=[[0, 0.20], [0, 0.30]])
+                                    range=[[0, m12s.max()+.01], [0, m23s.max()+.01]])
 # Mask empty bins so they appear white.
 # Also mask bins with very low entries to reduce noise (which is likely caused
 # by some errors anyway).
@@ -97,10 +100,10 @@ ax.set_xlabel(r"$m^2_{\gamma,\mu^+}$ [GeV$^2$]")
 ax.set_ylabel(r"$m^2_{\mu^+,\mu^-}$ [GeV$^2$]")
 ax.set_title(r"$\eta \to \mu\mu\gamma$ Dalitz plot")
 
-ax.text(0.025, 0.95, "Requires > 1 entry/bin to show",
-        transform=ax.transAxes,
-        verticalalignment='top',
-)
+# ax.text(0.025, 0.95, "Requires > 1 entry/bin to show",
+#         transform=ax.transAxes,
+#         verticalalignment='top',
+# )
 
 fig.tight_layout()
 fig.savefig(outfile, dpi=150)

@@ -65,9 +65,9 @@ def get_candidate_label(can: Candidate) -> str:
     has_mup_mm = any(d.err_type == ErrorType.MUP_PID_MISMATCH for d in can.dtrs)
     has_mum_mm = any(d.err_type == ErrorType.MUM_PID_MISMATCH for d in can.dtrs)
     has_pho_mm = any(d.err_type == ErrorType.PHOTON_PID_MISMATCH for d in can.dtrs)
-    has_mup_err = any(d.err_type == ErrorType.MUP_ERROR for d in can.dtrs)
-    has_mum_err = any(d.err_type == ErrorType.MUM_ERROR for d in can.dtrs)
-    has_pho_err = any(d.err_type == ErrorType.PHOTON_ERROR for d in can.dtrs)
+    has_mup_err = any(d.err_type == ErrorType.MUP_COMBINATORICS for d in can.dtrs)
+    has_mum_err = any(d.err_type == ErrorType.MUM_COMBINATORICS for d in can.dtrs)
+    has_pho_err = any(d.err_type == ErrorType.PHOTON_COMBINATORICS for d in can.dtrs)
     has_other = any(d.err_type == ErrorType.OTHER_ERROR for d in can.dtrs)
 
     has_any_mm = has_mup_mm or has_mum_mm or has_pho_mm

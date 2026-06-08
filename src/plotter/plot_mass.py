@@ -22,9 +22,9 @@ print(f"Reading from {args.input} and writing to {args.output}.")
 with uproot.open(args.input) as f:
     tree = f["tree"]
     # Convert to numpy array
-    tag_m = tree["tag_m"].array(library="np") 
+    tag_m = tree["tag_dtf_m"].array(library="np") 
 
-# Get lengths of arrays in tag_m to see how many candidates per event
+# Get lengths of arrays in tag_dtf_m to see how many candidates per event
 lengths = np.array([len(x) for x in tag_m])
 print(f"{'─' * 48}")
 print(f"Events with 0 candidates: {np.sum(lengths == 0)}")
@@ -53,12 +53,13 @@ print("Plotting histogram...")
 plt.rcParams['font.family'] = 'STIXGeneral'
 plt.rcParams['font.size'] = 16
 plt.figure(figsize=(12, 9))
-plt.hist(tag_m, bins=50, histtype='step', color='blue', label='Candidates')
+plt.hist(tag_m, bins=200, range=(300, 1200), histtype='step', color='blue', label='Candidates')
 plt.axvline(x=547.86, color='red', linestyle='--', label='PDG Mass')
+plt.xlim(300, 1200)
 plt.xlabel('Mass [MeV]')
 plt.ylabel('Candidates')
 plt.title('Eta Mass')
 plt.grid(alpha=0.3)
 plt.legend(frameon=False)
-plt.savefig(f"out/{args.output}", dpi=300)
-print(f"Saved plot to out/{args.output}")
+plt.savefig(f"{args.output}", dpi=300)
+print(f"Saved plot to {args.output}")

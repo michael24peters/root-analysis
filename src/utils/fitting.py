@@ -38,7 +38,7 @@ def _trapz(y, x):
 
 # ─── Histogram loader ─────────────────────────────────────────────────────────
 
-def load_histogram(root_path, branch="tag_m", tree="tree",
+def load_histogram(root_path, branch="tag_dtf_m", tree="tree",
                    xmin=480.0, xmax=620.0, nbins=80):
     """
     Read a ROOT TTree branch with uproot and return a binned histogram.

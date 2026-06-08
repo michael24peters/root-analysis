@@ -44,12 +44,12 @@ class ErrorType(str, Enum):
     MUM_ONLY_PID_MISMATCH = 'MUM_ONLY_PID_MISMATCH'
     DIMUON_PID_MISMATCH = 'DIMUON_PID_MISMATCH'
     PHOTON_PID_MISMATCH = 'PHOTON_PID_MISMATCH'
-    MUP_ERROR = 'MUP_ERROR'
-    MUP_ONLY_ERROR = 'MUP_ONLY_ERROR'
-    MUM_ERROR = 'MUM_ERROR'
-    MUM_ONLY_ERROR = 'MUM_ONLY_ERROR'
-    DIMUON_ERROR = 'DIMUON_ERROR'
-    PHOTON_ERROR = 'PHOTON_ERROR'
+    MUP_ERROR = 'MUP_COMBINATORICS'
+    MUP_ONLY_ERROR = 'MUP_ONLY_COMBINATORICS'
+    MUM_ERROR = 'MUM_COMBINATORICS'
+    MUM_ONLY_ERROR = 'MUM_ONLY_COMBINATORICS'
+    DIMUON_ERROR = 'DIMUON_COMBINATORICS'
+    PHOTON_ERROR = 'PHOTON_COMBINATORICS'
     OTHER_ERROR = 'OTHER_ERROR'
 
 # Data class to hold daughter information for a candidate
@@ -166,13 +166,13 @@ def classify_candidate(entryIdx, i, prt_pid, prt_idx_gen, prt_idx_mom, mc_pid, m
             # Classify daughter error type
             else:
                 if prt_pid[j] == -13:
-                    err_type = ErrorType.MUP_ERROR
+                    err_type = ErrorType.MUP_COMBINATORICS
                     dimu_err[0] = True
                 elif prt_pid[j] == 13:
-                    err_type = ErrorType.MUM_ERROR
+                    err_type = ErrorType.MUM_COMBINATORICS
                     dimu_err[1] = True
                 elif prt_pid[j] == 22:
-                    err_type = ErrorType.PHOTON_ERROR
+                    err_type = ErrorType.PHOTON_COMBINATORICS
                 else: 
                     err_type = ErrorType.OTHER_ERROR
         # Correctly matched dtr of signal candidate
@@ -280,7 +280,7 @@ def get_analytics(candidates: list[Candidate]) -> Analytics:
         if can.has_dimu_mismatch:
             err_counters[ErrorType.DIMUON_PID_MISMATCH] += 1
         if can.has_dimu_err:
-            err_counters[ErrorType.DIMUON_ERROR] += 1
+            err_counters[ErrorType.DIMUON_COMBINATORICS] += 1
         # Count per-daughter-level errors
         for dtr in can.dtrs:
             # Skip signal, add background
@@ -299,10 +299,10 @@ def get_analytics(candidates: list[Candidate]) -> Analytics:
                 if not can.has_dimu_mismatch:
                     mum_mismatch_only_count += 1
             # Other errors
-            elif dtr.err_type == ErrorType.MUP_ERROR:
+            elif dtr.err_type == ErrorType.MUP_COMBINATORICS:
                 if not can.has_dimu_err:
                     mup_err_only_count += 1
-            elif dtr.err_type == ErrorType.MUM_ERROR:
+            elif dtr.err_type == ErrorType.MUM_COMBINATORICS:
                 if not can.has_dimu_err:
                     mum_err_only_count += 1
             elif dtr.err_type == ErrorType.PHOTON_PID_MISMATCH:
@@ -312,13 +312,13 @@ def get_analytics(candidates: list[Candidate]) -> Analytics:
 
     err_counters[ErrorType.MUP_ONLY_PID_MISMATCH] = mup_mismatch_only_count
     err_counters[ErrorType.MUM_ONLY_PID_MISMATCH] = mum_mismatch_only_count
-    err_counters[ErrorType.MUP_ONLY_ERROR] = mup_err_only_count
-    err_counters[ErrorType.MUM_ONLY_ERROR] = mum_err_only_count
+    err_counters[ErrorType.MUP_ONLY_COMBINATORICS] = mup_err_only_count
+    err_counters[ErrorType.MUM_ONLY_COMBINATORICS] = mum_err_only_count
 
     # Useful values for probability calculations
     ncan = len(candidates)
-    denom_mu = max(err_counters[ErrorType.MUP_ERROR],
-                   err_counters[ErrorType.MUM_ERROR], 
+    denom_mu = max(err_counters[ErrorType.MUP_COMBINATORICS],
+                   err_counters[ErrorType.MUM_COMBINATORICS], 
                    1)
 
     # Return Analytics object with all relevant info for output
@@ -331,10 +331,10 @@ def get_analytics(candidates: list[Candidate]) -> Analytics:
         mum_mismatches=mum_mismatches,
         pho_mismatches=pho_mismatches,
         other_mismatches=other_mismatches,
-        prob_dimu_given_mu=err_counters[ErrorType.DIMUON_ERROR] / denom_mu,
-        prob_mup_err=err_counters[ErrorType.MUP_ERROR] / ncan if ncan else 0,
-        prob_mum_err=err_counters[ErrorType.MUM_ERROR] / ncan if ncan else 0,
-        prob_pho_err=err_counters[ErrorType.PHOTON_ERROR] / ncan if ncan else 0,
+        prob_dimu_given_mu=err_counters[ErrorType.DIMUON_COMBINATORICS] / denom_mu,
+        prob_mup_err=err_counters[ErrorType.MUP_COMBINATORICS] / ncan if ncan else 0,
+        prob_mum_err=err_counters[ErrorType.MUM_COMBINATORICS] / ncan if ncan else 0,
+        prob_pho_err=err_counters[ErrorType.PHOTON_COMBINATORICS] / ncan if ncan else 0,
         pid_freq={
             'MU+':    Counter(mup_mismatches).most_common(),
             'MU-':    Counter(mum_mismatches).most_common(),

@@ -1,23 +1,19 @@
 """
-fit_dcb_asym.py
-────────────────
+fit_dcb.py
+
 Fit an asymmetric Double Crystal Ball (DCB) signal + 2nd-order Chebyshev background
 to the eta candidate mass distribution from a ROOT file using iminuit ExtendedBinnedNLL.
 
 Tail parameters for left and right sides are independent: α_L, n_L, α_R, n_R.
 
-Outputs fit results as JSON (stdout by default, or --output file.json).
+Outputs fit results as JSON (stdout by default, or --outfile file.json).
 
-Usage
-─────
-    python fit_dcb_asym.py input.root [--output result.json]
+Usage:
+    python fit_dcb.py input.root [--outfile result.json]
                                [--xmin 480] [--xmax 620] [--nbins 80]
                                [--mean-init 548] [--sigma-init 10]
                                [--alphaL-init 1.5] [--nL-init 2]
                                [--alphaR-init 1.5] [--nR-init 2]
-
-Pipeline mode:
-    python fit_dcb_asym.py input.root | python plot_dcb.py - output.png
 """
 
 import sys
@@ -38,7 +34,7 @@ parser = argparse.ArgumentParser(
     epilog=__doc__,
 )
 parser.add_argument("infile", help="Input ROOT file")
-parser.add_argument("--output", default=None, help="Output JSON file (default: stdout)")
+parser.add_argument("--outfile", default=None, help="Output JSON file (default: stdout)")
 parser.add_argument("--xmin", type=float, default=480.0, help="Lower mass bound [MeV]")
 parser.add_argument("--xmax", type=float, default=620.0, help="Upper mass bound [MeV]")
 parser.add_argument("--nbins", type=int, default=80, help="Number of histogram bins")
@@ -199,11 +195,12 @@ result = {
 
 # ─── Output JSON ─────────────────────────────────────────────────────────────
 json_str = json.dumps(result, indent=2)
-if args.output:
-    outdir = os.path.dirname(os.path.abspath(args.output))
+if args.outfile:
+    args.outfile = 'out/' + args.outfile if not args.outfile.startswith('out/') else args.outfile
+    outdir = os.path.dirname(os.path.abspath(args.outfile))
     os.makedirs(outdir, exist_ok=True)
-    with open(args.output, "w") as f:
+    with open(args.outfile, "w") as f:
         f.write(json_str)
-    print(f"[done] JSON saved to: {args.output}", file=sys.stderr)
+    print(f"[done] JSON saved to: {args.outfile}", file=sys.stderr)
 else:
     print(json_str)
