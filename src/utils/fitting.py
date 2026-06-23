@@ -1,25 +1,3 @@
-"""
-fitting.py
-──────────
-Pure-numerical fitting utilities for eta mass peak analysis.
-No I/O, no matplotlib. Dependencies: numpy, scipy, iminuit.
-
-Public API
-──────────
-load_histogram(root_path, ...)         uproot → (centers, counts, errors)
-cheb_bkg_pdf(x, xmin, xmax, c0, c1)   normalized Chebyshev background PDF [1/MeV]
-cheb_cdf(x, xmin, xmax, c0, c1)       Chebyshev CDF normalized to [0, 1]
-gauss_pdf(x, mean, sigma, xmin, xmax)  normalized Gaussian signal PDF [1/MeV]
-gauss_cdf(x, mean, sigma, xmin, xmax)  Gaussian CDF normalized to [0, 1]
-dcb_unnorm(x, mean, sigma, ...)        unnormalized DCB PDF (vectorized)
-dcb_pdf(x, mean, sigma, ..., xmin, xmax)   normalized DCB signal PDF [1/MeV]
-dcb_cdf(x, mean, sigma, ..., xmin, xmax)   DCB CDF normalized to [0, 1]
-make_gauss_cost(counts, edges, xmin, xmax) iminuit ExtendedBinnedNLL: Gauss + Cheb
-make_dcb_cost(counts, edges, xmin, xmax)   iminuit ExtendedBinnedNLL: DCB + Cheb
-make_dcb_sym_cost(...)                     symmetric DCB (α_R ≡ α_L, n_R ≡ n_L)
-run_fit(cost, init, limits)            MIGRAD + HESSE → Minuit object
-"""
-
 import math
 import numpy as np
 from scipy.special import erf
@@ -63,14 +41,28 @@ def load_histogram(root_path, branch="tag_dtf_m", tree="tree",
 
 # ─── Chebyshev background ─────────────────────────────────────────────────────
 """
-T0(x) = 1
-T1(x) = x
-T2(x) = 2x² - 1
+The Chebyshev polynomials are defined by:
+T0(x̃) = 1
+T1(x̃) = x̃
+T2(x̃) = 2x̃² - 1
+
+where
+
+x̃ = (2x - (xmin + xmax)) / (xmax - xmin)  maps x ∈ [xmin, xmax] to x̃ ∈ [-1, 1].
+Parameterizing this way makes the variable normalized, centered at zero,
+and symmetric, which means T0 and T2 are even functions and T1 is odd. This
+means <T0, T1> = <T1, T2> = 0, so the coefficients c0 and c1 are uncorrelated in
+a fit. <T0, T2> ≠ 0, so c1 will be correlated with the overall normalization 
+(c0=0) but not with the slope (c0≠0).
+
+We use a 2nd-order Chebyshev polynomial for the background shape, which is
+B(x̃) = 1 + c0·T1(x̃) + c1·T2(x̃)
 """
 
 def _xtilde(x, xmin, xmax):
     """
-    Normalize x to [-1, 1] as RooFit's RooChebychev does.
+    Define parameterized, normalized [-1, 1] variable for the Chebyshev
+    polynomials.
 
     x̃ = (2x - (xmin + xmax)) / (xmax - xmin)
     """

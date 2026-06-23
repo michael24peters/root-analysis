@@ -40,9 +40,8 @@ merger.OutputFile(outfile)
 # Open each input file and add it to the list
 for infile in infiles:
     print(f'[INFO] Adding {infile}...')
-    tfile = ROOT.TFile.Open(infile, 'READ')
-    # Add TFile to merger
-    merger.AddFile(tfile)
+    # Add file to merger by name; TFileMerger manages opening/closing it
+    merger.AddFile(infile)
 # Use ROOT's TFileMerger to merge the files
 merger.Merge()
 print(f'[INFO] Successfully created {outfile}.')
