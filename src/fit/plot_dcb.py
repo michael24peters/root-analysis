@@ -1,7 +1,7 @@
 """
 Plot DCB fit results from JSON file
 Author: Michael Peters
-Usage: python plot_dcb_driver.py fit_result.json
+Usage: python plot_dcb.py fit_result.json
 """
 
 from plot_mass_fit import plot_fit, val_err
@@ -46,11 +46,14 @@ def build_text(params, chi2_per_ndof):
     )
     return plot_text, term_text
 
-plot_fit({
+CONFIG = {
     "description"    : "Plot DCB fit results from JSON file",
     "output"         : "out/dcb_mass_fit.png",
     "title"          : "Eta Mass",
     # "xlim"           : (420, 680),
     # "pull_ylim"      : (-3, 3),
     "build_text"     : build_text,
-})
+}
+
+if __name__ == "__main__":
+    plot_fit(CONFIG)

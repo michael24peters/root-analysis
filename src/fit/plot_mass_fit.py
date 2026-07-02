@@ -29,14 +29,9 @@ def print_summary(text):
     print(text)
     print("─" * W)
 
-def plot_fit(config):
-    # Parse arguments
-    args = parse_args()
+def plot_fit_data(data, config):
+    """Render a fit + pull plot from an already-loaded result dict."""
     output = config["output"] if "output" in config else "out/fit_result.png"
-    print(f"[INFO] Reading from {args.input} and writing to {output}.")
-
-    # Load JSON data
-    data = load_data(args.input)
 
     # Extract histogram data
     hist = data["histogram"]
@@ -88,9 +83,9 @@ def plot_fit(config):
     params = data["fit"]["parameters"]
     chi2_per_ndof = data["fit"]["chi2_per_ndof"]
     # Get text from config function, with error handling for compatibility
-    try: 
+    try:
         plot_text, term_text = config["build_text"](params, chi2_per_ndof)
-    except: 
+    except:
         plot_text = config["build_text"](params, chi2_per_ndof)
         term_text = None
     ax.text(0.025, 0.95, plot_text,
@@ -123,3 +118,13 @@ def plot_fit(config):
     # Print summary
     if term_text: print_summary(term_text)
     else: print_summary(plot_text)
+
+def plot_fit(config):
+    # Parse arguments
+    args = parse_args()
+    output = config["output"] if "output" in config else "out/fit_result.png"
+    print(f"[INFO] Reading from {args.input} and writing to {output}.")
+
+    # Load JSON data and plot
+    data = load_data(args.input)
+    plot_fit_data(data, config)
