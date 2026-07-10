@@ -32,7 +32,8 @@ args = parse_args()
 
 # Output file path
 _out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "out")
-outfile = os.path.join(_out_dir, "dalitz_dalitz.png") if args.plot_type == "dalitz" else os.path.join(_out_dir, "dalitz-phsp.png")
+if args.plot_type == "dalitz": outfile = os.path.join(_out_dir, "dalitz_dalitz.png")  
+else: outfile = os.path.join(_out_dir, "dalitz-phsp.png")
 print(f"[INFO] Reading from {args.input} and writing to {outfile}.")
 
 # Read tree with uproot.
@@ -44,8 +45,7 @@ with uproot.open(args.input) as f:
     )
 
 # Define variables for m^2(gamma, mu+) and m^2(mu+, mu-).
-# mc contains all MC particles, including the eta and its daughters. We need to
-# loop over events and find the gamma, mu+, and mu- for each event to compute
+# Loop over events and find the gamma, mu+, and mu- for each event to compute
 # the invariant masses.
 pids = branches["prt_pid"]
 pxs = branches["prt_px"]

@@ -22,10 +22,10 @@ import json
 import argparse
 import numpy as np
 
-# Ensure utils/fitting.py is importable
+# Ensure utils/fit_utils.py is importable
 _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'utils'))
-import fitting
+import fit_utils
 
 
 def fit_dcb(infile, xmin=480.0, xmax=620.0, nbins=80,
@@ -36,7 +36,7 @@ def fit_dcb(infile, xmin=480.0, xmax=620.0, nbins=80,
     if not os.path.exists(infile):
         sys.exit(f"[error] File not found: {infile}")
 
-    centers, counts, errors = fitting.load_histogram(
+    centers, counts, errors = fit_utils.load_histogram(
         infile, xmin=xmin, xmax=xmax, nbins=nbins)
     bin_edges = np.linspace(xmin, xmax, nbins + 1)
     N = counts.sum()
@@ -44,7 +44,7 @@ def fit_dcb(infile, xmin=480.0, xmax=620.0, nbins=80,
           file=sys.stderr)
 
     # Cost function
-    cost = fitting.make_dcb_cost(counts, bin_edges, xmin, xmax)  # asymmetric version
+    cost = fit_utils.make_dcb_cost(counts, bin_edges, xmin, xmax)  # asymmetric version
 
     # Initial parameters and limits
     init = dict(
@@ -73,7 +73,7 @@ def fit_dcb(infile, xmin=480.0, xmax=620.0, nbins=80,
     )
 
     # Run fit 
-    m = fitting.run_fit(cost, init, limits)
+    m = fit_utils.run_fit(cost, init, limits)
     p, e = m.values, m.errors
 
     print(f"[fit] valid={m.valid}  "
@@ -87,10 +87,10 @@ def fit_dcb(infile, xmin=480.0, xmax=620.0, nbins=80,
 
     # Compute bin predictions
     bw = (xmax - xmin) / nbins
-    sig_cdf_edges = fitting.dcb_cdf(bin_edges, p['mean'], p['sigma'],
+    sig_cdf_edges = fit_utils.dcb_cdf(bin_edges, p['mean'], p['sigma'],
                                     p['alphaL'], p['nL'], p['alphaR'], p['nR'],
                                     xmin, xmax)
-    bkg_cdf_edges = fitting.cheb_cdf(bin_edges, xmin, xmax, p['c0'], p['c1'])
+    bkg_cdf_edges = fit_utils.cheb_cdf(bin_edges, xmin, xmax, p['c0'], p['c1'])
     bin_sig = np.diff(sig_cdf_edges) * p['n_sig']
     bin_bkg = np.diff(bkg_cdf_edges) * p['n_bkg']
     bin_fit = bin_sig + bin_bkg
@@ -112,10 +112,10 @@ def fit_dcb(infile, xmin=480.0, xmax=620.0, nbins=80,
 
     # Smooth curves
     x_curve = np.linspace(xmin, xmax, 200)
-    curve_sig = fitting.dcb_pdf(x_curve, p['mean'], p['sigma'],
+    curve_sig = fit_utils.dcb_pdf(x_curve, p['mean'], p['sigma'],
                                  p['alphaL'], p['nL'], p['alphaR'], p['nR'],
                                  xmin, xmax) * p['n_sig'] * bw
-    curve_bkg = fitting.cheb_bkg_pdf(x_curve, xmin, xmax, p['c0'], p['c1']) * p['n_bkg'] * bw
+    curve_bkg = fit_utils.cheb_bkg_pdf(x_curve, xmin, xmax, p['c0'], p['c1']) * p['n_bkg'] * bw
     curve_fit = curve_sig + curve_bkg
 
     # Build JSON
