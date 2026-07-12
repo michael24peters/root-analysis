@@ -86,9 +86,9 @@ def fit_gauss(infile, xmin=480.0, xmax=620.0, nbins=80,
     print("monotonic:", np.all(np.diff(bkg_cdf_edges) >= -1e-12))
 
     # Goodness of fit
-    mask          = bin_fit > 0
-    chi2          = float(np.sum((counts[mask] - bin_fit[mask])**2 / bin_fit[mask]))
-    ndof          = int(mask.sum()) - m.nfit
+    mask = bin_fit > 0
+    chi2 = float(np.sum((counts[mask] - bin_fit[mask])**2 / bin_fit[mask]))
+    ndof = int(mask.sum()) - m.nfit
     chi2_per_ndof = chi2 / ndof if ndof > 0 else float('nan')
 
     # Data-based pulls: (d − f) / √d  (matching RooFit pull plots; 0 for empty bins)

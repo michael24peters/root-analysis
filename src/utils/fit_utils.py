@@ -39,7 +39,7 @@ def find_best_candidate(candidates, metrics=None, min=True):
 
 # ─── Histogram loader ─────────────────────────────────────────────────────────
 
-def load_histogram(root_path, branch="tag_dtf_m", chi2_branch="tag_dtf_chi2",
+def load_histogram(root_path, branch="tag_dtf_m", metric_branch="tag_dtf_chi2",
                    tree="tree", xmin=480.0, xmax=620.0, nbins=80):
     """
     Read a ROOT TTree branch. Returns a binned histogram.
@@ -57,11 +57,11 @@ def load_histogram(root_path, branch="tag_dtf_m", chi2_branch="tag_dtf_chi2",
     import uproot
     with uproot.open(root_path) as f:
         arr = f[tree][branch].array(library="np")
-        chi2_arr = f[tree][chi2_branch].array(library="np") if chi2_branch else None
+        metric_arr = f[tree][metric_branch].array(library="np") if metric_branch else None
     if arr.dtype == object:
-        if chi2_arr is not None:
-            best = [find_best_candidate(candidates, metrics=chi2)[0]
-                    for candidates, chi2 in zip(arr, chi2_arr)]
+        if metric_arr is not None:
+            best = [find_best_candidate(candidates, metrics=metric)[0]
+                    for candidates, metric in zip(arr, metric_arr)]
         else:
             best = [find_best_candidate(candidates)[0] for candidates in arr]
         flat = np.asarray([v for v in best if v is not None])
