@@ -16,6 +16,13 @@ def find_best_candidate(candidates, metrics=None, min=True):
     """Find the best candidate in an event based on target values. Selects the
     smallest target value by default (min=True). If metrics is None, returns
     the first candidate.
+
+    Parameters:
+    candidates : list or array of candidate values (e.g., masses)
+    metrics    : list or array of target values (e.g., chi2) to select the best 
+                 candidate
+    min        : bool, if True selects the candidate with the smallest metric,
+                 if False selects the candidate with the largest metric
     """
     # If candidate is empty, return None
     if len(candidates) == 0: return None, None
