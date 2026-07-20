@@ -35,8 +35,8 @@ def fit_gauss(infile, xmin=480.0, xmax=620.0, nbins=80,
     centers, counts, errors = fit_utils.load_histogram(
         infile, xmin=xmin, xmax=xmax, nbins=nbins)
     bin_edges = np.linspace(xmin, xmax, nbins + 1)
-    N = counts.sum()
-    print(f"[info] {int(N)} entries in [{xmin}, {xmax}] MeV across {nbins} bins",
+    N_CAND = counts.sum()
+    print(f"[info] {int(N_CAND)} entries in [{xmin}, {xmax}] MeV across {nbins} bins",
           file=sys.stderr)
 
     # Fit
@@ -45,22 +45,26 @@ def fit_gauss(infile, xmin=480.0, xmax=620.0, nbins=80,
     init = dict(
         mean  = mean_init,
         sigma = sigma_init,
-        n_sig = N * 0.5,
-        n_bkg = N * 0.5,
+        n_sig = N_CAND * 0.5,
         c0    = 0.0,
         c1    = 0.0,
     )
     limits = dict(
         mean  = (xmin, xmax),
         sigma = (1.0, 50.0),
-        n_sig = (0.0, N * 2),
-        n_bkg = (0.0, N * 2),
+        n_sig = (0.0, N_CAND),
         c0    = (-1.0, 1.0),
         c1    = (-1.4, 1.4),
     )
 
     m = fit_utils.run_fit(cost, init, limits)
     p, e = m.values, m.errors
+
+    # n_bkg is not a free parameter: n_cand = N_CAND is fixed, and n_sig + n_bkg = N_CAND
+    # by unitarity, so n_bkg is derived from n_sig. Since N_CAND carries no
+    # uncertainty, n_bkg's error equals n_sig's error (n_bkg = N_CAND - n_sig).
+    n_bkg = N_CAND - p['n_sig']
+    n_bkg_err = e['n_sig']
 
     print(f"[fit] valid={m.valid}  "
           f"mean={p['mean']:.3f}±{e['mean']:.3f} MeV  "
@@ -73,17 +77,17 @@ def fit_gauss(infile, xmin=480.0, xmax=620.0, nbins=80,
     sig_cdf_edges = fit_utils.gauss_cdf(bin_edges, p['mean'], p['sigma'], xmin, xmax)
     bkg_cdf_edges = fit_utils.cheb_cdf(bin_edges, xmin, xmax, p['c0'], p['c1'])
     bin_sig = np.diff(sig_cdf_edges) * p['n_sig']
-    bin_bkg = np.diff(bkg_cdf_edges) * p['n_bkg']
+    bin_bkg = np.diff(bkg_cdf_edges) * n_bkg
     bin_fit = bin_sig + bin_bkg
 
     # Check cdf for sig
-    print("shape:", sig_cdf_edges.shape)
-    print("min/max:", sig_cdf_edges.min(), sig_cdf_edges.max())
-    print("monotonic:", np.all(np.diff(sig_cdf_edges) >= -1e-12))
+    print("sig cdf shape:", sig_cdf_edges.shape)
+    print("sig cdf min/max:", sig_cdf_edges.min(), sig_cdf_edges.max())
+    print("sig cdf monotonic:", np.all(np.diff(sig_cdf_edges) >= -1e-12))
     # Repeat for bkg
-    print("shape:", bkg_cdf_edges.shape)
-    print("min/max:", bkg_cdf_edges.min(), bkg_cdf_edges.max())
-    print("monotonic:", np.all(np.diff(bkg_cdf_edges) >= -1e-12))
+    print("bkg cdf shape:", bkg_cdf_edges.shape)
+    print("bkg cdf min/max:", bkg_cdf_edges.min(), bkg_cdf_edges.max())
+    print("bkg cdf monotonic:", np.all(np.diff(bkg_cdf_edges) >= -1e-12))
 
     # Goodness of fit
     mask = bin_fit > 0
@@ -102,7 +106,7 @@ def fit_gauss(infile, xmin=480.0, xmax=620.0, nbins=80,
     # Smooth curve
     x_curve   = np.linspace(xmin, xmax, 200)
     curve_sig = fit_utils.gauss_pdf(x_curve, p['mean'], p['sigma'], xmin, xmax) * p['n_sig'] * bw
-    curve_bkg = fit_utils.cheb_bkg_pdf(x_curve, xmin, xmax, p['c0'], p['c1']) * p['n_bkg'] * bw
+    curve_bkg = fit_utils.cheb_bkg_pdf(x_curve, xmin, xmax, p['c0'], p['c1']) * n_bkg * bw
     curve_fit = curve_sig + curve_bkg
 
     # Build JSON
@@ -130,8 +134,9 @@ def fit_gauss(infile, xmin=480.0, xmax=620.0, nbins=80,
                           "error": round(float(e['sigma']), 6), "unit": "MeV"},
                 "n_sig": {"value": round(float(p['n_sig']), 2),
                           "error": round(float(e['n_sig']), 2)},
-                "n_bkg": {"value": round(float(p['n_bkg']), 2),
-                          "error": round(float(e['n_bkg']), 2)},
+                "n_bkg": {"value": round(float(n_bkg), 2),
+                          "error": round(float(n_bkg_err), 2),
+                          "note": "derived: n_cand - n_sig (not a free fit parameter)"},
                 "c0":    {"value": round(float(p['c0']),    6),
                           "error": round(float(e['c0']),    6),
                           "note": "Chebyshev linear coefficient (slope)"},

@@ -12,8 +12,6 @@ def _trapz(y, x):
     return np.sum(avg * dx)
 
 
-# ─── Best-candidate selection ─────────────────────────────────────────────────
-
 def find_best_candidate(candidates, metrics=None, min=True):
     """Find the best candidate in an event based on target values. Selects the
     smallest target value by default (min=True). If metrics is None, returns
@@ -36,8 +34,6 @@ def find_best_candidate(candidates, metrics=None, min=True):
                     best_idx, best_candidate, best_target = j, candidate, metrics[j]
     return best_candidate, best_idx
 
-
-# ─── Histogram loader ─────────────────────────────────────────────────────────
 
 def load_histogram(root_path, branch="tag_dtf_m", metric_branch="tag_dtf_chi2",
                    tree="tree", xmin=480.0, xmax=620.0, nbins=80):
@@ -73,7 +69,7 @@ def load_histogram(root_path, branch="tag_dtf_m", metric_branch="tag_dtf_chi2",
     return centers, counts.astype(float), errors
 
 
-# ─── Chebyshev background ─────────────────────────────────────────────────────
+# --- Chebyshev ---
 
 def _xtilde(x, xmin, xmax):
     """
@@ -112,7 +108,7 @@ def cheb_cdf(x, xmin, xmax, c0, c1):
                     - _cheb_antideriv(u_lo, c0, c1)) / norm
 
 
-# ─── Gaussian signal ──────────────────────────────────────────────────────────
+# --- Gaussian ---
 
 def gauss_pdf(x, mean, sigma, xmin, xmax):
     """Normalized Gaussian signal PDF."""
@@ -135,7 +131,7 @@ def gauss_cdf(x, mean, sigma, xmin, xmax):
     return 0.5 * (erf_x - erf_lo) / norm
 
 
-# ─── Double Crystal Ball signal ───────────────────────────────────────────────
+# --- Double Crystal Ball ---
 """
 A Gaussian core with independent power-law tails on each side of the peak:
 
@@ -206,7 +202,7 @@ def dcb_cdf(x, mean, sigma, alphaL, nL, alphaR, nR, xmin, xmax):
     return np.interp(np.asarray(x, float), xg, cdf_grid)
 
 
-# ─── iminuit cost functions ───────────────────────────────────────────────────
+# --- iminuit cost functions ---
 #
 # Each method returns an iminuit.cost.ExtendedBinnedNLL instance.
 # The inner `scaled_cdf(xe, *params)` function must return:
@@ -215,12 +211,14 @@ def dcb_cdf(x, mean, sigma, alphaL, nL, alphaR, nR, xmin, xmax):
 # iminuit infers parameter names from the inner function's signature.
 
 def make_gauss_cost(counts, bin_edges, xmin, xmax):
-    """ExtendedBinnedNLL cost for Gaussian signal + 2nd-order Chebyshev 
-    background. Free parameters: mean, sigma, n_sig, n_bkg, c0, c1
+    """ExtendedBinnedNLL cost for Gaussian signal + 2nd-order Chebyshev
+    background. Free parameters: mean, sigma, n_sig, c0, c1.
     """
     from iminuit.cost import ExtendedBinnedNLL
+    n_cand = float(np.sum(counts))
 
-    def scaled_cdf(xe, mean, sigma, n_sig, n_bkg, c0, c1):
+    def scaled_cdf(xe, mean, sigma, n_sig, c0, c1):
+        n_bkg = n_cand - n_sig  # n_bkg is not a free parameter
         return (
             gauss_cdf(xe, mean, sigma, xmin, xmax) * n_sig
             + cheb_cdf(xe, xmin, xmax, c0, c1) * n_bkg
@@ -232,11 +230,13 @@ def make_gauss_cost(counts, bin_edges, xmin, xmax):
 def make_dcb_cost(counts, bin_edges, xmin, xmax):
     """
     ExtendedBinnedNLL cost for DCB signal + 2nd-order Chebyshev background.
-    Free parameters: mean, sigma, alphaL, nL, alphaR, nR, n_sig, n_bkg, c0, c1
+    Free parameters: mean, sigma, alphaL, nL, alphaR, nR, n_sig, c0, c1.
     """
     from iminuit.cost import ExtendedBinnedNLL
+    n_cand = float(np.sum(counts))
 
-    def scaled_cdf(xe, mean, sigma, alphaL, nL, alphaR, nR, n_sig, n_bkg, c0, c1):
+    def scaled_cdf(xe, mean, sigma, alphaL, nL, alphaR, nR, n_sig, c0, c1):
+        n_bkg = n_cand - n_sig  # n_bkg is not a free parameter
         return (
             dcb_cdf(xe, mean, sigma, alphaL, nL, alphaR, nR, xmin, xmax) * n_sig
             + cheb_cdf(xe, xmin, xmax, c0, c1) * n_bkg
@@ -248,11 +248,14 @@ def make_dcb_cost(counts, bin_edges, xmin, xmax):
 def make_dcb_sym_cost(counts, bin_edges, xmin, xmax):
     """
     ExtendedBinnedNLL cost for symmetric DCB (α_R ≡ α_L, n_R ≡ n_L) + Chebyshev.
-    Free parameters: mean, sigma, alpha, n, n_sig, n_bkg, c0, c1  (8 vs 10)
+    Free parameters: mean, sigma, alpha, n, n_sig, c0, c1  (7 vs 9).
+    n_bkg = n_cand - n_sig (n_cand = sum(counts), fixed).
     """
     from iminuit.cost import ExtendedBinnedNLL
+    n_cand = float(np.sum(counts))
 
-    def scaled_cdf(xe, mean, sigma, alpha, n, n_sig, n_bkg, c0, c1):
+    def scaled_cdf(xe, mean, sigma, alpha, n, n_sig, c0, c1):
+        n_bkg = n_cand - n_sig  # n_bkg is not a free parameter
         return (
             dcb_cdf(xe, mean, sigma, alpha, n, alpha, n, xmin, xmax) * n_sig
             + cheb_cdf(xe, xmin, xmax, c0, c1) * n_bkg
@@ -261,7 +264,7 @@ def make_dcb_sym_cost(counts, bin_edges, xmin, xmax):
     return ExtendedBinnedNLL(counts, bin_edges, scaled_cdf)
 
 
-# ─── iminuit fit wrapper ───────────────────────────────────────────────────────
+# --- Fit ---
 
 def run_fit(cost, initial_values, limits, fixed=None):
     """

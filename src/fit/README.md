@@ -50,10 +50,13 @@ python src/fit/plot_dalitz_fit.py results_dalitz.json
 ```
 
 (Substitute the actual fitted `mean`/`sigma`/`c0`/`c1` from `results_gauss.json`.)
-`fit_dalitz.py` outputs a JSON with fitted `n_sig`/`n_bkg` (+ errors) per
-Dalitz bin; `plot_dalitz_fit.py` renders it as a yield-map PNG (bins that
-weren't fit or didn't converge are masked white, and the physical signal
-boundary is drawn as reference lines).
+`fit_dalitz.py` outputs a JSON with fitted `n_sig` (+ error) per Dalitz bin.
+`n_bkg` is not an independent fit parameter: `n_cand` (total candidates in
+the bin) is fixed, and `n_sig + n_bkg = n_cand` by unitarity, so `n_bkg` is
+reported as the derived value `n_cand - n_sig` (same error as `n_sig`).
+`plot_dalitz_fit.py` renders `n_sig` as a yield-map PNG (bins that weren't
+fit or didn't converge are masked white, and the physical signal boundary
+is drawn as reference lines).
 
 Default grid (`--m12-min/max`, `--m23-min/max`, 25x25 bins) is padded around
 the physical eta -> mu mu gamma signal window rather than spanning the full

@@ -39,8 +39,8 @@ def fit_dcb(infile, xmin=480.0, xmax=620.0, nbins=80,
     centers, counts, errors = fit_utils.load_histogram(
         infile, xmin=xmin, xmax=xmax, nbins=nbins)
     bin_edges = np.linspace(xmin, xmax, nbins + 1)
-    N = counts.sum()
-    print(f"[info] {int(N)} entries in [{xmin}, {xmax}] MeV across {nbins} bins",
+    N_CAND = counts.sum()
+    print(f"[info] {int(N_CAND)} entries in [{xmin}, {xmax}] MeV across {nbins} bins",
           file=sys.stderr)
 
     # Cost function
@@ -54,8 +54,7 @@ def fit_dcb(infile, xmin=480.0, xmax=620.0, nbins=80,
         nL     = nL_init,
         alphaR = alphaR_init,
         nR     = nR_init,
-        n_sig  = N * 0.5,
-        n_bkg  = N * 0.5,
+        n_sig  = N_CAND * 0.5,
         c0     = 0.0,
         c1     = 0.0,
     )
@@ -66,15 +65,20 @@ def fit_dcb(infile, xmin=480.0, xmax=620.0, nbins=80,
         nL     = (0.1, 50.0),
         alphaR = (0.1, 10.0),
         nR     = (0.1, 50.0),
-        n_sig  = (0.0, N*2),
-        n_bkg  = (0.0, N*2),
+        n_sig  = (0.0, N_CAND),
         c0     = (-1.0, 1.0),
         c1     = (-1.4, 1.4),
     )
 
-    # Run fit 
+    # Run fit
     m = fit_utils.run_fit(cost, init, limits)
     p, e = m.values, m.errors
+
+    # n_bkg is not a free parameter: n_cand = N_CAND is fixed, and n_sig + n_bkg = N_CAND
+    # by unitarity, so n_bkg is derived from n_sig. Since N_CAND carries no
+    # uncertainty, n_bkg's error equals n_sig's error (n_bkg = N_CAND - n_sig).
+    n_bkg = N_CAND - p['n_sig']
+    n_bkg_err = e['n_sig']
 
     print(f"[fit] valid={m.valid}  "
           f"mean={p['mean']:.3f}±{e['mean']:.3f} MeV  "
@@ -92,7 +96,7 @@ def fit_dcb(infile, xmin=480.0, xmax=620.0, nbins=80,
                                     xmin, xmax)
     bkg_cdf_edges = fit_utils.cheb_cdf(bin_edges, xmin, xmax, p['c0'], p['c1'])
     bin_sig = np.diff(sig_cdf_edges) * p['n_sig']
-    bin_bkg = np.diff(bkg_cdf_edges) * p['n_bkg']
+    bin_bkg = np.diff(bkg_cdf_edges) * n_bkg
     bin_fit = bin_sig + bin_bkg
 
     # Goodness of fit
@@ -115,7 +119,7 @@ def fit_dcb(infile, xmin=480.0, xmax=620.0, nbins=80,
     curve_sig = fit_utils.dcb_pdf(x_curve, p['mean'], p['sigma'],
                                  p['alphaL'], p['nL'], p['alphaR'], p['nR'],
                                  xmin, xmax) * p['n_sig'] * bw
-    curve_bkg = fit_utils.cheb_bkg_pdf(x_curve, xmin, xmax, p['c0'], p['c1']) * p['n_bkg'] * bw
+    curve_bkg = fit_utils.cheb_bkg_pdf(x_curve, xmin, xmax, p['c0'], p['c1']) * n_bkg * bw
     curve_fit = curve_sig + curve_bkg
 
     # Build JSON
@@ -151,8 +155,9 @@ def fit_dcb(infile, xmin=480.0, xmax=620.0, nbins=80,
                           "error": round(float(e['nR']), 6)},
                 "n_sig": {"value": round(float(p['n_sig']), 2),
                           "error": round(float(e['n_sig']), 2)},
-                "n_bkg": {"value": round(float(p['n_bkg']), 2),
-                          "error": round(float(e['n_bkg']), 2)},
+                "n_bkg": {"value": round(float(n_bkg), 2),
+                          "error": round(float(n_bkg_err), 2),
+                          "note": "derived: n_cand - n_sig (not a free fit parameter)"},
                 "c0":    {"value": round(float(p['c0']), 6),
                           "error": round(float(e['c0']), 6),
                           "note": "Chebyshev linear coefficient (slope)"},
