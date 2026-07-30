@@ -1,23 +1,16 @@
 """
 fit_gauss.py
 
-Fit a Gaussian signal + 2nd-order Chebyshev background to the eta candidate
-mass distribution from a ROOT file, using iminuit ExtendedBinnedNLL.
+Fit a Gaussian signal + 2nd-order Chebyshev background to a distribution of
+mass values, using iminuit ExtendedBinnedNLL.
 
-Outputs fit results as JSON (stdout by default, or --output file.json).
-The JSON is self-contained: it includes histogram data, smooth curve points,
-and pull values so that plot_fit_result.py never needs the ROOT file.
-
-Usage:
-    python fit_gauss.py input.root [--output result.json]
-                        [--xmin 480] [--xmax 620] [--nbins 80]
-                        [--mean-init 548] [--sigma-init 10]
+This is a library module: it takes an array of numbers and fits it. Reading
+ROOT files, applying selection, and reducing to one candidate per event all
+happen upstream in driver_gauss.py via cut_utils.
 """
 
 import sys
 import os
-import json
-import argparse
 import numpy as np
 
 # Ensure src/utils is importable regardless of working directory
@@ -26,17 +19,21 @@ sys.path.insert(0, os.path.join(_here, '..', 'utils'))
 import fit_utils
 
 
-def fit_gauss(infile, xmin=480.0, xmax=620.0, nbins=80,
+def fit_gauss(values, xmin=480.0, xmax=620.0, nbins=80,
               mean_init=547.9, sigma_init=10.0):
-    """Run the Gaussian + Chebyshev fit and return the result dict."""
-    if not os.path.exists(infile):
-        sys.exit(f"[error] File not found: {infile}")
+    """
+    Run the Gaussian + Chebyshev fit and return the result dict.
 
-    centers, counts, errors = fit_utils.load_histogram(
-        infile, xmin=xmin, xmax=xmax, nbins=nbins)
+    values : 1-D numpy array of masses [MeV], one per event. This function
+             applies no selection of its own -- it fits whatever it is given.
+    """
+    values = np.asarray(values, dtype=float)
+
+    centers, counts, errors = fit_utils.make_histogram(
+        values, xmin=xmin, xmax=xmax, nbins=nbins)
     bin_edges = np.linspace(xmin, xmax, nbins + 1)
     N_CAND = counts.sum()
-    print(f"[info] {int(N_CAND)} entries in [{xmin}, {xmax}] MeV across {nbins} bins",
+    print(f'[info] {int(N_CAND)} entries in [{xmin}, {xmax}] MeV across {nbins} bins',
           file=sys.stderr)
 
     # Fit
@@ -80,27 +77,24 @@ def fit_gauss(infile, xmin=480.0, xmax=620.0, nbins=80,
     bin_bkg = np.diff(bkg_cdf_edges) * n_bkg
     bin_fit = bin_sig + bin_bkg
 
-    # Check cdf for sig
-    print("sig cdf shape:", sig_cdf_edges.shape)
-    print("sig cdf min/max:", sig_cdf_edges.min(), sig_cdf_edges.max())
-    print("sig cdf monotonic:", np.all(np.diff(sig_cdf_edges) >= -1e-12))
-    # Repeat for bkg
-    print("bkg cdf shape:", bkg_cdf_edges.shape)
-    print("bkg cdf min/max:", bkg_cdf_edges.min(), bkg_cdf_edges.max())
-    print("bkg cdf monotonic:", np.all(np.diff(bkg_cdf_edges) >= -1e-12))
-
     # Goodness of fit
     mask = bin_fit > 0
     chi2 = float(np.sum((counts[mask] - bin_fit[mask])**2 / bin_fit[mask]))
     ndof = int(mask.sum()) - m.nfit
     chi2_per_ndof = chi2 / ndof if ndof > 0 else float('nan')
 
-    # Data-based pulls: (d − f) / √d  (matching RooFit pull plots; 0 for empty bins)
-    pulls = np.where(counts > 0,
-                     (counts - bin_fit) / np.sqrt(counts),
-                     0.0)
+    # Data-based pulls: (d − f) / √d  (RooFit pull plots; 0 for empty bins)
+    # pulls = np.where(counts > 0, (counts - bin_fit) / np.sqrt(counts), 0.0)
+    
+    # Per-bin Pearson pull: (d − f) / √f, model error in the denominator so that
+    # Σ pull² == the Pearson chi2 reported above (0 for empty bins). Note the fit
+    # itself minimizes a Poisson binned NLL, whose exact residual is the
+    # Baker–Cousins deviance sign(d−f)·√(2[f − d + d·ln(d/f)]); at these per-bin
+    # counts (1e4+) Pearson and deviance pulls are numerically identical, so this
+    # simpler form is used.
+    pulls = np.where(bin_fit > 0, (counts - bin_fit) / np.sqrt(bin_fit), 0.0)
 
-    print(f"[fit] χ²/ndf = {chi2_per_ndof:.4f}  ({chi2:.2f} / {ndof})",
+    print(f'[fit] χ²/ndf = {chi2_per_ndof:.4f}  ({chi2:.2f} / {ndof})',
           file=sys.stderr)
 
     # Smooth curve
@@ -111,95 +105,54 @@ def fit_gauss(infile, xmin=480.0, xmax=620.0, nbins=80,
 
     # Build JSON
     result = {
-        "meta": {
-            "input_file": infile,
-            "model":      "gauss",
-            "xmin":  xmin,
-            "xmax":  xmax,
-            "nbins": nbins,
-            "symmetric": False,
+        'meta': {
+            'n_input':    int(values.size),
+            'model':      'gauss',
+            'xmin':  xmin,
+            'xmax':  xmax,
+            'nbins': nbins,
+            'symmetric': False,
         },
-        "fit": {
-            "converged":      bool(m.valid),
-            "valid":          bool(m.valid),
-            "fval":           round(float(m.fval), 4),
-            "chi2":           round(chi2, 4),
-            "ndof":           ndof,
-            "chi2_per_ndof":  round(chi2_per_ndof, 6),
-            "n_free_params":  m.nfit,
-            "parameters": {
-                "mean":  {"value": round(float(p['mean']),  6),
-                          "error": round(float(e['mean']),  6), "unit": "MeV"},
-                "sigma": {"value": round(float(p['sigma']), 6),
-                          "error": round(float(e['sigma']), 6), "unit": "MeV"},
-                "n_sig": {"value": round(float(p['n_sig']), 2),
-                          "error": round(float(e['n_sig']), 2)},
-                "n_bkg": {"value": round(float(n_bkg), 2),
-                          "error": round(float(n_bkg_err), 2),
-                          "note": "derived: n_cand - n_sig (not a free fit parameter)"},
-                "c0":    {"value": round(float(p['c0']),    6),
-                          "error": round(float(e['c0']),    6),
-                          "note": "Chebyshev linear coefficient (slope)"},
-                "c1":    {"value": round(float(p['c1']),    6),
-                          "error": round(float(e['c1']),    6),
-                          "note": "Chebyshev quadratic coefficient (curvature)"},
+        'fit': {
+            'converged':      bool(m.valid),
+            'valid':          bool(m.valid),
+            'fval':           round(float(m.fval), 4),
+            'chi2':           round(chi2, 4),
+            'ndof':           ndof,
+            'chi2_per_ndof':  round(chi2_per_ndof, 6),
+            'n_free_params':  m.nfit,
+            'parameters': {
+                'mean':  {'value': round(float(p['mean']),  6),
+                          'error': round(float(e['mean']),  6), 'unit': 'MeV'},
+                'sigma': {'value': round(float(p['sigma']), 6),
+                          'error': round(float(e['sigma']), 6), 'unit': 'MeV'},
+                'n_sig': {'value': round(float(p['n_sig']), 2),
+                          'error': round(float(e['n_sig']), 2)},
+                'n_bkg': {'value': round(float(n_bkg), 2),
+                          'error': round(float(n_bkg_err), 2),
+                          'note': 'derived: n_cand - n_sig (not a free fit parameter)'},
+                'c0':    {'value': round(float(p['c0']),    6),
+                          'error': round(float(e['c0']),    6),
+                          'note': 'Chebyshev linear coefficient (slope)'},
+                'c1':    {'value': round(float(p['c1']),    6),
+                          'error': round(float(e['c1']),    6),
+                          'note': 'Chebyshev quadratic coefficient (curvature)'},
             },
         },
-        "histogram": {
-            "bin_centers": centers.tolist(),
-            "bin_counts":  counts.tolist(),
-            "bin_errors":  errors.tolist(),
-            "bin_fit":     bin_fit.tolist(),
-            "bin_sig":     bin_sig.tolist(),
-            "bin_bkg":     bin_bkg.tolist(),
-            "bin_pulls":   pulls.tolist(),
+        'histogram': {
+            'bin_centers': centers.tolist(),
+            'bin_counts':  counts.tolist(),
+            'bin_errors':  errors.tolist(),
+            'bin_fit':     bin_fit.tolist(),
+            'bin_sig':     bin_sig.tolist(),
+            'bin_bkg':     bin_bkg.tolist(),
+            'bin_pulls':   pulls.tolist(),
         },
-        "curve": {
-            "x":   x_curve.tolist(),
-            "fit": curve_fit.tolist(),
-            "sig": curve_sig.tolist(),
-            "bkg": curve_bkg.tolist(),
+        'curve': {
+            'x':   x_curve.tolist(),
+            'fit': curve_fit.tolist(),
+            'sig': curve_sig.tolist(),
+            'bkg': curve_bkg.tolist(),
         },
     }
     return result
-
-
-def _parse_args():
-    parser = argparse.ArgumentParser(
-        description="Gaussian + Chebyshev mass fit → JSON",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=__doc__,
-    )
-    parser.add_argument("infile", help="Input ROOT file")
-    parser.add_argument("--output", default=None,
-                        help="Output JSON file (default: stdout)")
-    parser.add_argument("--xmin",       type=float, default=480.0,
-                        help="Lower mass bound [MeV] (default: 480)")
-    parser.add_argument("--xmax",       type=float, default=620.0,
-                        help="Upper mass bound [MeV] (default: 620)")
-    parser.add_argument("--nbins",      type=int,   default=80,
-                        help="Number of histogram bins (default: 80)")
-    parser.add_argument("--mean-init",  type=float, default=547.9,
-                        help="Initial mean [MeV] (default: 547.9)")
-    parser.add_argument("--sigma-init", type=float, default=10.0,
-                        help="Initial sigma [MeV] (default: 10.0)")
-    return parser.parse_args()
-
-
-if __name__ == "__main__":
-    args = _parse_args()
-    result = fit_gauss(
-        args.infile,
-        xmin=args.xmin, xmax=args.xmax, nbins=args.nbins,
-        mean_init=args.mean_init, sigma_init=args.sigma_init,
-    )
-
-    json_str = json.dumps(result, indent=2)
-    if args.output:
-        outdir = os.path.dirname(os.path.abspath(args.output))
-        os.makedirs(outdir, exist_ok=True)
-        with open(args.output, "w") as f:
-            f.write(json_str)
-        print(f"[done] JSON saved to: {args.output}", file=sys.stderr)
-    else:
-        print(json_str)

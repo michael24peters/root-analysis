@@ -1,11 +1,21 @@
-# ╔════════════════════════════════════════════════════════════════════════════╗
-# ║ Script to analyze background for eta -> mu+ mu- (gamma).                   ║
-# ║ Author: Michael Peters                                                     ║
-# ╚════════════════════════════════════════════════════════════════════════════╝
+"""
+bkg.py
+
+Script to analyze background for eta -> mu+ mu- (gamma). Requires MC generator
+level information to classify candidates as signal or background. Uses uproot
+for ROOT I/O (no PyROOT dependency).
+
+Usage:
+    python bkg.py input.root [--outfile out/output.txt] [--verbose]
+                  [--dtrs 2] [--log] [--debug] [--pnnmu_cut 0.5]
+"""
+
+# TODO: Remove log file option and just log to console, which is what the rest
+# of this project does. May be a future feature to log to file, but not needed
+# for now.
 
 from __future__ import annotations
 
-import ROOT
 import argparse
 from dataclasses import dataclass
 from enum import Enum
@@ -14,26 +24,29 @@ import os
 import json
 import logging
 
+import awkward as ak
+import uproot
+
 def parse_args():
     """
     Parse command line arguments.
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument('-i', '--infile', required=True,
-                        help = 'Input ROOT file')
+    parser.add_argument('infile', help='Input ROOT file')
+    parser.add_argument('-o', '--outfile', default='out/output.txt',
+                        help='Output text file')
     parser.add_argument('-v', '--verbose', action='store_true', default=False,
                         help='Enable verbose output')
-    parser.add_argument('-o', '--outfile', default='out/bkg_ana',
-                        help='Output text file')
     parser.add_argument('--pnnmu_cut', type=float, default=None,
                         help='PROBNNmu cut value applied to input file')
     # Store number of daughters per candidate, 2 for eta -> mu+ mu-, 3 for 
     # eta -> mu+ mu- gamma, etc.
     parser.add_argument('--dtrs', action='store', default=2, type=int,
                         help='Number of daughters per candidate (default: 2)')
-    parser.add_argument('--log', default='INFO',
-                    choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
-                    help='Logging level (default: WARNING)')
+    parser.add_argument('--log', default=False, action='store_true',
+                        help='Enable logging to file (default: False)')
+    parser.add_argument('-d', '--debug', action='store_true', default=False,
+                        help='Enable debug logging (default: False)')
     return parser.parse_args()
 
 # Possible error categories for a decay candidate
@@ -91,7 +104,8 @@ class Analytics:
     pid_freq: dict[str, list[tuple[int, int]]]
 
 
-#───────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+
 def classify_candidate(entryIdx, i, prt_pid, prt_idx_gen, prt_idx_mom, mc_pid, mc_idx_mom,
                        probnn_mu, args):
     """
@@ -204,58 +218,73 @@ def classify_candidate(entryIdx, i, prt_pid, prt_idx_gen, prt_idx_mom, mc_pid, m
                      has_dimu_err=all(dimu_err))
 
 
-#───────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+
 def run_event_loop(args):
     """
     Loop over events in the input ROOT file, classify candidates as signal or
     background, determine error types for background candidates, and return as
     a list of Candidate objects for analytics.
-    """
 
-    # Combine files to create single histogram
-    tfile = ROOT.TFile.Open(args.infile, 'READ')
-    tree = tfile.Get('tree')
+    All branches are read once via a single bulk uproot call, then converted
+    to plain Python lists -- classify_candidate's per-candidate branching
+    logic stays a Python loop either way, so this only replaces PyROOT's
+    per-entry tree.GetEntry() calls with pre-loaded in-memory data.
+    """
+    with uproot.open(args.infile) as f:
+        branches = f['tree'].arrays(
+            ['tag_pid', 'prt_pid', 'prt_idx_gen', 'prt_idx_mom',
+             'mc_pid', 'mc_idx_mom', 'prt_pnn_mu'],
+            library='ak',
+        )
+
+    # Explicitly define types for easier handling
+    tag_pid_evts = ak.to_list(branches['tag_pid'])
+    prt_pid_evts = ak.to_list(branches['prt_pid'])
+    prt_idx_gen_evts = ak.to_list(branches['prt_idx_gen'])
+    prt_idx_mom_evts = ak.to_list(branches['prt_idx_mom'])
+    mc_pid_evts = ak.to_list(branches['mc_pid'])
+    mc_idx_mom_evts = ak.to_list(branches['mc_idx_mom'])
+    probnn_mu_evts = ak.to_list(branches['prt_pnn_mu'])
 
     # List of Candidate objects
     candidates = []
 
     # Event loop
-    for entryIdx in range(0, tree.GetEntries()):
-        tree.GetEntry(entryIdx)
-        
+    for entryIdx in range(len(tag_pid_evts)):
         # Print status every 500,000 events
         check_interval = 500000
         if entryIdx % check_interval == 0 and entryIdx > 0:
             logging.info(f'Processed {entryIdx:,d} events...')
-        
-        # Explicitly define types for easier handling
+
         # Reconstructed particle information
-        tag_pid = [int(pid) for pid in tree.tag_pid]
-        prt_pid = [int(pid) for pid in tree.prt_pid]
+        tag_pid = [int(pid) for pid in tag_pid_evts[entryIdx]]
+        prt_pid = [int(pid) for pid in prt_pid_evts[entryIdx]]
         # MC-matching index information
-        prt_idx_gen = [int(idx) for idx in tree.prt_idx_gen]
-        prt_idx_mom = [int(idx) for idx in tree.prt_idx_mom]
+        prt_idx_gen = [int(idx) for idx in prt_idx_gen_evts[entryIdx]]
+        prt_idx_mom = [int(idx) for idx in prt_idx_mom_evts[entryIdx]]
         # Generator particle information
-        mc_pid = [int(pid) for pid in tree.mc_pid]
-        mc_idx_mom = [int(idx) for idx in tree.mc_idx_mom]
+        mc_pid = [int(pid) for pid in mc_pid_evts[entryIdx]]
+        mc_idx_mom = [int(idx) for idx in mc_idx_mom_evts[entryIdx]]
         # PROBNNmu branch
-        probnn_mu = [float(prob) for prob in tree.prt_pnn_mu]
+        probnn_mu = [float(prob) for prob in probnn_mu_evts[entryIdx]]
 
         # Skip empty events
         ntags = len(tag_pid)
         if ntags == 0: continue
-        
+
         # Get per-candidate-level information and background analysis
         for i in range(ntags):
             if tag_pid[i] != 221: continue  # skip failed reco/non-eta candidates
-            candidate = classify_candidate(entryIdx, i, prt_pid, prt_idx_gen, 
-                                           prt_idx_mom, mc_pid, mc_idx_mom, 
+            candidate = classify_candidate(entryIdx, i, prt_pid, prt_idx_gen,
+                                           prt_idx_mom, mc_pid, mc_idx_mom,
                                            probnn_mu, args)
             if candidate is not None: candidates.append(candidate)
     return candidates
 
 
-#───────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+
 def get_analytics(candidates: list[Candidate]) -> Analytics:
     """
     Get analytics from list of Candidate objects, including counts, error rates,
@@ -344,7 +373,8 @@ def get_analytics(candidates: list[Candidate]) -> Analytics:
     )
 
 
-#───────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+
 def format_pid_freq_table(label, rows: list[tuple[int, int]]) -> str:
     """
     Return a plain text table for (pid, count) rows.
@@ -353,8 +383,8 @@ def format_pid_freq_table(label, rows: list[tuple[int, int]]) -> str:
     if not rows: return out
 
     # Determine column widths based on data
-    pid_w = max(len(" PID "), max(len(str(pid)) for pid, _ in rows))
-    cnt_w = max(len(" # "), max(len(str(cnt)) for _, cnt in rows))
+    pid_w = max(len(' PID '), max(len(str(pid)) for pid, _ in rows))
+    cnt_w = max(len(' # '), max(len(str(cnt)) for _, cnt in rows))
     
     # Label
     if label == 'PHOTON': out += f'\n{"═" * 4} {label} ' + f'{"═" * 4}\n'
@@ -368,7 +398,9 @@ def format_pid_freq_table(label, rows: list[tuple[int, int]]) -> str:
     out += '└' + '─' * (pid_w + 2) + '┴' + '─' * (cnt_w + 2) + '┘\n'
     return out
 
-#───────────────────────────────────────────────────────────────────────────────
+
+# ──────────────────────────────────────────────────────────────────────────────
+
 def format_text(result: Analytics, verbose: bool, candidates: list[Candidate]) -> str:
     """
     Return a formatted string of background analysis results, including counts,
@@ -428,7 +460,8 @@ def format_text(result: Analytics, verbose: bool, candidates: list[Candidate]) -
     return out
 
 
-#───────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+
 def format_json(result: Analytics, verbose: bool, candidates: list[Candidate]) -> dict:
     """
     Return a formatted JSON dictionary of background analysis results, including
@@ -471,23 +504,42 @@ def format_json(result: Analytics, verbose: bool, candidates: list[Candidate]) -
     return out
 
 
-#───────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+
 def main():
     # Parse command line arguments
     args = parse_args()
     # Set up logging
-    logger = logging.getLogger(__name__)
+    level = logging.DEBUG if args.debug else logging.INFO
+    # Set basic logging configuration to log to console with specified level and
+    # format
     logging.basicConfig(
-        level=getattr(logging, args.log),
+        level=level,
         format='%(asctime)s [%(levelname)s] %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S',
-        filename=args.outfile + '.log'
+        datefmt='%Y-%m-%d %H:%M:%S'
     )
+    if args.log:
+        logging.basicConfig(
+            level=level,
+            format='%(asctime)s [%(levelname)s] %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S',
+            # Strip any file type extensions before adding .log to avoid double
+            # extensions. If no extension, just add .log to the end.
+            filename=os.path.splitext(args.outfile)[0] + '.log',
+            filemode='w'
+        )
     # Also print to stderr
     logging.getLogger().addHandler(logging.StreamHandler())
 
     # Set up IO
-    os.makedirs('out', exist_ok=True)
+    # Leading directories for output file prefix created, if any
+    # Strip any file extensions if present
+    if args.outfile.endswith('.txt') or args.outfile.endswith('.json'):
+        args.outfile = os.path.splitext(args.outfile)[0]
+    # Create leading directories, not including the file name itself (which 
+    # currently does not have an extension, but will be added later for text and
+    # JSON output)
+    os.makedirs(os.path.dirname(args.outfile), exist_ok=True)
     if args.pnnmu_cut is not None:
         logging.info(f'Applying PROBNNmu cut: {args.pnnmu_cut}')
     logging.info(f'Reading from {args.infile}, writing to {args.outfile}.')
@@ -505,7 +557,7 @@ def main():
         f.write(text_out)
     with open(args.outfile + '.json', 'w') as f:
         json.dump(json_out, f, indent=2)
-    logging.info(f'DONE: Results saved to: {args.outfile}')
+    logging.info(f'DONE: Results saved to: {args.outfile}.txt and {args.outfile}.json')
 
 if __name__ == '__main__':
     main()

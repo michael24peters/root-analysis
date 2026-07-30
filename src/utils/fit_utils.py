@@ -1,7 +1,15 @@
+"""
+fit_utils.py
+
+Histogramming, PDFs/CDFs, iminuit cost functions, and the fit driver. Pure
+numpy -- this module knows nothing about ROOT files, awkward arrays, events, or
+candidates. Selection and candidate reduction happen upstream in cut_utils; by
+the time anything here is called, the data is a flat array of values.
+"""
+
 import math
 import numpy as np
 from scipy.special import erf
-
 
 def _trapz(y, x):
     """Trapezoidal integration"""
@@ -12,65 +20,19 @@ def _trapz(y, x):
     return np.sum(avg * dx)
 
 
-def find_best_candidate(candidates, metrics=None, min=True):
-    """Find the best candidate in an event based on target values. Selects the
-    smallest target value by default (min=True). If metrics is None, returns
-    the first candidate.
-
-    Parameters:
-    candidates : list or array of candidate values (e.g., masses)
-    metrics    : list or array of target values (e.g., chi2) to select the best 
-                 candidate
-    min        : bool, if True selects the candidate with the smallest metric,
-                 if False selects the candidate with the largest metric
+def make_histogram(values, xmin=480.0, xmax=620.0, nbins=80):
     """
-    # If candidate is empty, return None
-    if len(candidates) == 0: return None, None
-    # Find best candidate in event
-    best_idx, best_candidate = 0, candidates[0]
-    # Find the candidate with the smallest target value, e.g., tag_dtf_chi2.
-    # If the target_vals is None, skips and returns the first candidate.
-    if metrics is not None:
-        best_target = metrics[0]
-        for j, candidate in enumerate(candidates):
-            if min:
-                if metrics[j] < best_target:
-                    best_idx, best_candidate, best_target = j, candidate, metrics[j]
-            else:
-                if metrics[j] > best_target:
-                    best_idx, best_candidate, best_target = j, candidate, metrics[j]
-    return best_candidate, best_idx
+    Bin a flat array of values into the fit window.
 
-
-def load_histogram(root_path, branch="tag_dtf_m", metric_branch="tag_dtf_chi2",
-                   tree="tree", xmin=480.0, xmax=620.0, nbins=80):
-    """
-    Read a ROOT TTree branch. Returns a binned histogram.
-
-    Events with multiple candidates are reduced to a single entry per event
-    via find_best_candidate, keeping the candidate with the smallest
-    chi2_branch value -- pass chi2_branch=None to just keep the first
-    candidate in each event instead (e.g. if no chi2 branch is available).
+    values : 1-D numpy array (e.g. one mass per event, already selected and
+             reduced to one candidate per event by cut_utils)
 
     Returns:
     centers ndarray (nbins,) : bin centre positions [MeV]
     counts  ndarray (nbins,) : observed counts per bin (float)
     errors  ndarray (nbins,) : per-bin uncertainty, max(sqrt(counts), 1)
     """
-    import uproot
-    with uproot.open(root_path) as f:
-        arr = f[tree][branch].array(library="np")
-        metric_arr = f[tree][metric_branch].array(library="np") if metric_branch else None
-    if arr.dtype == object:
-        if metric_arr is not None:
-            best = [find_best_candidate(candidates, metrics=metric)[0]
-                    for candidates, metric in zip(arr, metric_arr)]
-        else:
-            best = [find_best_candidate(candidates)[0] for candidates in arr]
-        flat = np.asarray([v for v in best if v is not None])
-    else:
-        flat = arr.ravel()
-    counts, edges = np.histogram(flat, bins=nbins, range=(xmin, xmax))
+    counts, edges = np.histogram(values, bins=nbins, range=(xmin, xmax))
     centers = 0.5 * (edges[:-1] + edges[1:])
     errors  = np.maximum(np.sqrt(counts.astype(float)), 1.0)
     return centers, counts.astype(float), errors
@@ -300,6 +262,9 @@ def run_fit(cost, initial_values, limits, fixed=None):
     m = Minuit(cost, **initial_values)
     for param, lim in limits.items(): m.limits[param] = lim
     for param in (fixed or []): m.fixed[param] = True
-    m.migrad()
-    if m.valid: m.hesse()
+    # Give MIGRAD a call budget. MIGRAD stops early and reports valid=False 
+    # even though it was sitting at the minimum. A second migrad pass recovers cases the first misses.
+    m.migrad(ncall=100000)
+    if not m.valid: m.migrad(ncall=100000)
+    m.hesse()
     return m

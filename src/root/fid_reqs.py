@@ -1,36 +1,44 @@
-################################################################################
-# Script to apply fiducial requirements (also calculates efficiencies).        #
-# Author: Michael Peters                                                       #
-################################################################################
-# TODO: make this work for eta -> 4mu and eta -> 2mu 2e cases as well. Requires
-# more generalized code.
+"""
+fid_reqs.py
 
-import ROOT
+Script to apply fiducial requirements to generator-level particles in a ROOT
+file. Uses uproot + awkward for I/O (no PyROOT/ROOT dependency).
+
+TODO: make this work for eta -> 4mu and eta -> 2mu 2e cases as well. Requires
+more generalized code.
+
+Usage:
+    python fid_reqs.py input.root [--gamma]
+"""
+
 import argparse
 import logging
 
-#-------------------------------------------------------------------------------
+import awkward as ak
+import numpy as np
+import uproot
+
+# -------------------------------------------------------------------------------
+
 
 def pseudorapidity(px, py, pz):
     """
-    Calculate pseudorapidity using same method as ROOT.TVector3::PseudoRapidity(),
-    except using try / except to catch division by zero.
+    Vectorized pseudorapidity, matching ROOT.TVector3::PseudoRapidity() but
+    using np.where instead of try/except to handle division by zero.
     Source: https://root.cern.ch/doc/master/classTVector3.html#aedc6fc6f5f6f3f3d4e4f4e4f4f4f4f4
     Code: https://root.cern.ch/doc/master/TVector3_8cxx_source.html#l00345
     """
-    p = (px**2 + py**2 + pz**2)**0.5
-    cosTheta = pz / p if p != 0 else 1.0  # Avoid division by zero
-    if cosTheta * cosTheta < 1:
-        return -0.5 * ROOT.TMath.Log((1.0 - cosTheta) / (1.0 + cosTheta))
-    if pz == 0: return 0.0
-    elif pz > 0: return 1e10
-    else: return -1e10
+    px, py, pz = np.asarray(px, float), np.asarray(py, float), np.asarray(pz, float)
+    p = np.sqrt(px**2 + py**2 + pz**2)
+    cos_theta = np.where(p != 0, pz / np.where(p != 0, p, 1.0), 1.0)  # avoid div by zero
+    with np.errstate(divide='ignore', invalid='ignore'):
+        log_eta = -0.5 * np.log((1.0 - cos_theta) / (1.0 + cos_theta))
+    edge_eta = np.where(pz == 0, 0.0, np.where(pz > 0, 1e10, -1e10))
+    return np.where(cos_theta**2 < 1, log_eta, edge_eta)
 
-#-------------------------------------------------------------------------------
 
 def passes_reqs(pid, px, py, pz):
-    """Check if a particle with given pid and momentum passes fiducial
-    requirements.
+    """Vectorized fiducial requirement check for one or more particles.
 
     Fiducial requirements:
     - Pseudorapidity (eta) in [2, 4.5]
@@ -38,83 +46,86 @@ def passes_reqs(pid, px, py, pz):
     - Muon P > 3 GeV
     - Photon pT > 500 MeV
     """
-    p = (px**2 + py**2 + pz**2)**0.5  # momentum
-    pt = (px**2 + py**2)**0.5  # transverse momentum
-    
-    # Prevent division by zero (wouldn't pass cuts anyway)
-    if p == 0: return False
+    pid = np.asarray(pid)
+    px, py, pz = np.asarray(px, float), np.asarray(py, float), np.asarray(pz, float)
+    p = np.sqrt(px**2 + py**2 + pz**2)  # momentum
+    pt = np.sqrt(px**2 + py**2)  # transverse momentum
     eta = pseudorapidity(px, py, pz)
-    
-    # Apply requirements
-    if abs(pid) == 13: return (2.0 < eta < 4.5) and (pt > 500) and (p > 3000)
-    elif pid == 22: return (pt > 500) and (2.0 < eta < 4.5)
-    elif pid == 221: return True
-    else: return False
 
-#-------------------------------------------------------------------------------
+    is_muon = np.abs(pid) == 13
+    is_photon = pid == 22
+    is_eta = pid == 221
 
-def apply_fiducial_reqs(tree, gamma_flag):
-    """Apply fiducial cuts to generator-level particles.
-    
-    Returns a new tree with only events that pass the fiducial cuts.
+    muon_ok = (2.0 < eta) & (eta < 4.5) & (pt > 500) & (p > 3000)
+    photon_ok = (pt > 500) & (2.0 < eta) & (eta < 4.5)
+
+    ok = np.select([is_muon, is_photon, is_eta], [muon_ok, photon_ok, True], default=False)
+    return ok & (p != 0)  # prevent division by zero (wouldn't pass cuts anyway)
+
+
+# -------------------------------------------------------------------------------
+
+
+def event_passes(pids, px, py, pz, expected_pids):
     """
+    Group one event's flat generator-level daughter arrays into candidates of
+    len(expected_pids) particles each, and return True if the last candidate
+    matching `expected_pids` has all daughters pass the fiducial requirements.
 
-    new_tree = tree.CloneTree(0)
+    Preserves the original script's per-event semantics: an event with more
+    than one matching candidate (very rare, generator-level MC normally has
+    exactly one) keeps only the last matching candidate's pass/fail status
+    rather than requiring every candidate to pass -- see the similar
+    single-candidate caveat in bkg.py's classify_candidate.
+    """
+    stride = len(expected_pids)
+    passed = True
+    for start in range(0, len(pids) - stride + 1, stride):
+        group = pids[start:start + stride]
+        if group != expected_pids:
+            continue
+        passed = bool(np.all(passes_reqs(
+            group,
+            px[start:start + stride],
+            py[start:start + stride],
+            pz[start:start + stride],
+        )))
+    return passed
 
-    logging.info(f'Entries: {tree.GetEntries()}')
-    for entryIdx in range(0, tree.GetEntries()):
-        # Print status
-        check_interval = 100000
-        if entryIdx % check_interval == 0 and entryIdx > 0:
-            logging.info(f'Processed {entryIdx:,d} events, kept {new_tree.GetEntries()}...')
-        
-        tree.GetEntry(entryIdx)
-        
-        prt_pid = getattr(tree, 'prt_pid')  # Reconstructed particle pids
-        mc_pid = getattr(tree, 'mc_pid')  # MC-matched daughter pids
-        px = getattr(tree, 'mc_px')  # MC-matched daughter px
-        py = getattr(tree, 'mc_py')  # MC-matched daughter py
-        pz = getattr(tree, 'mc_pz')  # MC-matched daughter pz 
 
-        prt_pid = [int(pid) for pid in prt_pid]
-        mc_pid = [int(pid) for pid in mc_pid]
-        
-        passed = True
-        # This is not the most elegant way to do this but is straightforward.
-        # eta -> mu+ mu- gamma case
-        if gamma_flag:
-            for i in range(0, len(mc_pid) - 3, 4):
-                pids = mc_pid[i:i + 4]
-                px4 = px[i:i + 4]
-                py4 = py[i:i + 4]
-                pz4 = pz[i:i + 4]
-                if len(pids) < 4: continue
+def apply_fiducial_reqs(events, gamma_flag):
+    """
+    Apply fiducial cuts to generator-level particles for every event.
 
-                if pids[0] != 221 or pids[1] != -13 or pids[2] != 13 or pids[3] != 22:
-                    continue
+    `events` is an awkward record array with (at least) the mc_pid, mc_px,
+    mc_py, mc_pz fields. Returns a boolean numpy array, one entry per event,
+    True where the event passes.
+    """
+    expected = [221, -13, 13, 22] if gamma_flag else [221, -13, 13]
 
-                passed = all(passes_reqs(pids[j], px4[j], py4[j], pz4[j]) 
-                            for j in range(4))
-        # eta -> mu+ mu- case
-        else:
-            for i in range(0, len(mc_pid) - 2, 3):
-                pids = mc_pid[i:i + 3]
-                px3 = px[i:i + 3]
-                py3 = py[i:i + 3]
-                pz3 = pz[i:i + 3]
-                if len(pids) < 3: continue
+    # Pull the needed branches into plain Python lists up front -- the
+    # per-event candidate grouping below is inherently ragged (variable
+    # number of candidates per event), so it stays a Python loop, but
+    # operating on pre-loaded lists instead of PyROOT's per-entry TTree
+    # reads. The fiducial math itself (pseudorapidity/passes_reqs) runs
+    # vectorized over each matching candidate's 3-4 particles at once.
+    mc_pid = ak.to_list(events['mc_pid'])
+    mc_px = ak.to_list(events['mc_px'])
+    mc_py = ak.to_list(events['mc_py'])
+    mc_pz = ak.to_list(events['mc_pz'])
 
-                if pids[0] != 221 or pids[1] != -13 or pids[2] != 13:
-                    continue
+    n_events = len(mc_pid)
+    mask = np.zeros(n_events, dtype=bool)
+    logging.info(f'Entries: {n_events}')
+    for i in range(n_events):
+        if i % 100000 == 0 and i > 0:
+            logging.info(f'Processed {i:,d} events, kept {int(mask[:i].sum()):,d}...')
+        pids = [int(pid) for pid in mc_pid[i]]
+        mask[i] = event_passes(pids, mc_px[i], mc_py[i], mc_pz[i], expected)
+    return mask
 
-                passed = all(passes_reqs(pids[j], px3[j], py3[j], pz3[j]) 
-                            for j in range(3))
-            
-        if passed: new_tree.Fill()
 
-    return new_tree
-
-#-------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------
 
 # Set up logging to stderr only
 logger = logging.getLogger(__name__)
@@ -123,44 +134,33 @@ logging.basicConfig(
     format='%(asctime)s [%(levelname)s] %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S',
 )
-# Also print to stderr
 logging.getLogger().addHandler(logging.StreamHandler())
 
 # Parse command line arguments
 parser = argparse.ArgumentParser()
-parser.add_argument("infile", help="Input ROOT file")
+parser.add_argument('infile', help='Input ROOT file')
 # eta -> mu+ mu- (gamma) flag
 parser.add_argument(
     '-g', '--gamma',
     action='store_true',
-    help='eta -> mu+ mu- gamma flag'
+    help='eta -> mu+ mu- gamma flag',
 )
 args = parser.parse_args()
 
 infile = args.infile
 # Put outfile in same directory as infile with fixed name
-if infile is not None:
-    outfile = '/'.join(infile.split('/')[:-1]) + '/fiducial_requirements.root'
-else: raise ValueError('Input file must be specified with -i or --infile flag.')
-# Output file name
+outfile = '/'.join(infile.split('/')[:-1]) + '/fiducial_requirements.root'
 logging.info(f'Reading from {infile}, writing to {outfile}.')
 
-tfile = ROOT.TFile.Open(infile, 'READ')
-tree = tfile.Get('tree')
+with uproot.open(infile) as fin:
+    events = fin['tree'].arrays(library='ak')
 
-new_tfile = ROOT.TFile.Open(outfile, "RECREATE")
-new_tfile.cd()
+mask = apply_fiducial_reqs(events, args.gamma)
+kept = events[mask]
 
-# Apply fiducial requirements
-new_tree = apply_fiducial_reqs(tree, args.gamma)
+logging.info(f'Total kept entries: {len(kept)}')
 
-logging.info(f'Total kept entries: {new_tree.GetEntries()}')
-
-# Close input file
-tfile.Close()
-
-# Write new tree to output file 
-new_tree.Write()
-new_tfile.Close()
+with uproot.recreate(outfile) as fout:
+    fout['tree'] = kept
 
 logging.info(f'Done: wrote reduced tree with fiducial requirements to {outfile}.')

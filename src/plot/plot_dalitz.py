@@ -1,8 +1,11 @@
-# !/usr/bin/env python3
-# Plot Dalitz plot from ROOT tree.
-# Usage:
-#   python plot_dalitz.py input.root --type dalitz
-#   python plot_dalitz.py input.root --type phsp
+"""
+plot_dalitz.py
+
+Plot dalitz plot of eta -> mu+ mu- gamma candidates from a ROOT file.
+
+Usage:
+    python plot_dalitz.py input.root [--type dalitz|phsp]
+"""
 
 import argparse
 import os
@@ -12,10 +15,10 @@ import uproot
 
 def parse_args():
 
-    parser = argparse.ArgumentParser(description="Dalitz plot from ROOT tree.")
-    parser.add_argument("input", help="Input ROOT file")
+    parser = argparse.ArgumentParser(description='Dalitz plot from ROOT tree.')
+    parser.add_argument('input', help='Input ROOT file')
     parser.add_argument(
-        "--type", dest="plot_type", choices=["dalitz", "phsp"], default="dalitz",
+        '--type', dest='plot_type', choices=['dalitz', 'phsp'], default='dalitz',
         help="Plot type: 'dalitz' -> dalitz_dalitz.png, 'phsp' -> dalitz-phsp.png"
     )
     return parser.parse_args()
@@ -31,27 +34,27 @@ def invariant_mass2(px1, py1, pz1, e1, px2, py2, pz2, e2):
 args = parse_args()
 
 # Output file path
-_out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "out")
-if args.plot_type == "dalitz": outfile = os.path.join(_out_dir, "dalitz_dalitz.png")  
-else: outfile = os.path.join(_out_dir, "dalitz-phsp.png")
-print(f"[INFO] Reading from {args.input} and writing to {outfile}.")
+_out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'out')
+if args.plot_type == 'dalitz': outfile = os.path.join(_out_dir, 'dalitz_dalitz.png')  
+else: outfile = os.path.join(_out_dir, 'dalitz-phsp.png')
+print(f'[INFO] Reading from {args.input} and writing to {outfile}.')
 
 # Read tree with uproot.
 with uproot.open(args.input) as f:
-    tree = f["tree"]
+    tree = f['tree']
     branches = tree.arrays(
-        ["prt_pid", "prt_px", "prt_py", "prt_pz", "prt_e"],
-        library="np"
+        ['prt_pid', 'prt_px', 'prt_py', 'prt_pz', 'prt_e'],
+        library='np'
     )
 
 # Define variables for m^2(gamma, mu+) and m^2(mu+, mu-).
 # Loop over events and find the gamma, mu+, and mu- for each event to compute
 # the invariant masses.
-pids = branches["prt_pid"]
-pxs = branches["prt_px"]
-pys = branches["prt_py"]
-pzs = branches["prt_pz"]
-es = branches["prt_e"]
+pids = branches['prt_pid']
+pxs = branches['prt_px']
+pys = branches['prt_py']
+pzs = branches['prt_pz']
+es = branches['prt_e']
 
 m12s = []
 m23s = []
@@ -79,8 +82,8 @@ for i in range(len(pids)):
 m12s = np.array(m12s)
 m23s = np.array(m23s)
 
-print(f"m12 range: [{m12s.min():.4f}, {m12s.max():.4f}]")
-print(f"m23 range: [{m23s.min():.4f}, {m23s.max():.4f}]")
+print(f'm12 range: [{m12s.min():.4f}, {m12s.max():.4f}]')
+print(f'm23 range: [{m23s.min():.4f}, {m23s.max():.4f}]')
 
 # Plot.
 fig, ax = plt.subplots(figsize=(7, 6))
@@ -93,12 +96,12 @@ h, xedges, yedges = np.histogram2d(m12s, m23s, bins=100,
 # are correctly pid identified but are not from eta candidate.
 h_masked = np.ma.masked_where(h <= 1, h)
 
-mesh = ax.pcolormesh(xedges, yedges, h_masked.T, cmap="viridis")
-fig.colorbar(mesh, ax=ax, label="Entries")
+mesh = ax.pcolormesh(xedges, yedges, h_masked.T, cmap='viridis')
+fig.colorbar(mesh, ax=ax, label='Entries')
 
-ax.set_xlabel(r"$m^2_{\gamma,\mu^+}$ [GeV$^2$]")
-ax.set_ylabel(r"$m^2_{\mu^+,\mu^-}$ [GeV$^2$]")
-ax.set_title(r"$\eta \to \mu\mu\gamma$ Dalitz plot")
+ax.set_xlabel(r'$m^2_{\gamma,\mu^+}$ [GeV$^2$]')
+ax.set_ylabel(r'$m^2_{\mu^+,\mu^-}$ [GeV$^2$]')
+ax.set_title(r'$\eta \to \mu\mu\gamma$ Dalitz plot')
 
 # ax.text(0.025, 0.95, "Requires > 1 entry/bin to show",
 #         transform=ax.transAxes,
@@ -107,4 +110,4 @@ ax.set_title(r"$\eta \to \mu\mu\gamma$ Dalitz plot")
 
 fig.tight_layout()
 fig.savefig(outfile, dpi=150)
-print(f"Saved: {outfile}")
+print(f'Saved: {outfile}')

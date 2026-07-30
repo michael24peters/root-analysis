@@ -1,5 +1,14 @@
-#!/usr/bin/env python3
-# Usage: python plot_pulls.py fit_results.json [output.png]
+"""
+plot_pulls.py
+
+Plot the pull distribution from a fit results JSON file, as well as a normalized
+Gaussian distribution for comparison, scaled to have the same area as the
+pull distribution. The pull is defined as:
+    pull = (y_data - y_fit) / sigma_data
+
+Usage:
+    python plot_pulls.py fit_results.json [output.png]
+"""
 
 import os
 import argparse
@@ -9,31 +18,31 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 from scipy import stats
 
-# ─── Argument parsing ─────────────────────────────────────────────────────────
-parser = argparse.ArgumentParser(description="Pull plot from json fit results")
-parser.add_argument("input", help="Input JSON file")
-parser.add_argument("output", nargs="?", default="out/pull_plot.png",
-                    help="Output PNG file (default: out/pull_plot.png)")
+# --- Argument parsing ---
+parser = argparse.ArgumentParser(description='Pull plot from json fit results')
+parser.add_argument('input', help='Input JSON file')
+parser.add_argument('output', nargs='?', default='out/pull_plot.png',
+                    help='Output PNG file (default: out/pull_plot.png)')
 args = parser.parse_args()
-print(f"[INFO] Reading from {args.input} and writing to {args.output}.")
+print(f'[INFO] Reading from {args.input} and writing to {args.output}.')
 
-# ─── Load JSON ────────────────────────────────────────────────────────────────
+# --- Load JSON ---
 with open(args.input) as f:
     data = json.load(f)
 
-# ─── Extract pull values ──────────────────────────────────────────────────────
-print("Extracting pull values...")
-hist = data["histogram"]
-x = np.array(hist["bin_centers"])
-pulls = np.array(hist["bin_pulls"])
+# --- Extract pull values ---
+print('Extracting pull values...')
+hist = data['histogram']
+x = np.array(hist['bin_centers'])
+pulls = np.array(hist['bin_pulls'])
 n_pulls = len(pulls)
-print(f"[INFO] Extracted {n_pulls} pull values from: {args.input}")
+print(f'[INFO] Extracted {n_pulls} pull values from: {args.input}')
 
-# ─── Plot configuration ───────────────────────────────────────────────────────
-plt.rcParams["font.family"] = "STIXGeneral"
-plt.rcParams["font.size"] = 12
+# --- Plot configuration ---
+plt.rcParams['font.family'] = 'STIXGeneral'
+plt.rcParams['font.size'] = 12
 
-# ─── Create pull histogram ─────────────────────────────────────────────────────
+# --- Create pull histogram ---
 # Get derived values
 mean = np.mean(pulls)
 std = np.std(pulls, ddof=1)
@@ -58,11 +67,11 @@ ax.hist(
     pulls,
     bins=nbins,
     range=(xmin, xmax),
-    color="#e07b39",   # orange — matches kOrange+7 from the fit script
+    color='#e07b39',   # orange — matches kOrange+7 from the fit script
     alpha=0.75,
-    edgecolor="white",
+    edgecolor='white',
     linewidth=0.7,
-    label=f"Pull values\n($N_{{\\mathrm{{bins}}}}={n_pulls}$)",
+    label=f'Pull values\n($N_{{\\mathrm{{bins}}}}={n_pulls}$)',
     zorder=2,
 )
 
@@ -71,43 +80,43 @@ x_gauss = np.linspace(xmin, xmax, 400)
 # Calculates pdf for norm and scales it to match the histogram area
 y_gauss = area * stats.norm.pdf(x_gauss)
 ax.plot(x_gauss, y_gauss,
-        label="Normal gaussian\n(scaled to hist area)",
-        color="blue",
+        label='Normal gaussian\n(scaled to hist area)',
+        color='blue',
         linewidth=2,
         linestyle='--',
         zorder=3)
 
 # Plot configuration
 # Axis labels, title, legend
-ax.set_xlabel(r"Pull  $(y_{\mathrm{data}} - y_{\mathrm{fit}})\,/\,\sigma_{\mathrm{data}}$",
+ax.set_xlabel(r'Pull  $(y_{\mathrm{data}} - y_{\mathrm{fit}})\,/\,\sigma_{\mathrm{data}}$',
               fontsize=12)
-ax.set_ylabel("Pull counts")
-ax.set_title("Pull distribution")
+ax.set_ylabel('Pull counts')
+ax.set_title('Pull distribution')
 ax.set_xlim(xmin, xmax)
 # Automatic minor ticks
 ax.yaxis.set_minor_locator(ticker.AutoMinorLocator())
 ax.xaxis.set_minor_locator(ticker.AutoMinorLocator())
 # Legend
-ax.legend(frameon=False, loc="upper right")
+ax.legend(frameon=False, loc='upper right')
 
-# ─── Summary text ─────────────────────────────────────────────────────────────
-text = f"$\\mu = {mean:+.3f}$\n$\\sigma = {std:.3f}$"
+# --- Summary text ---
+text = f'$\\mu = {mean:+.3f}$\n$\\sigma = {std:.3f}$'
 ax.text(0.025, 0.95, text, transform=ax.transAxes, verticalalignment='top')
 
-# ─── Save plot─────────────────────────────────────────────────────────────────
-os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
+# --- Save plot ---
+os.makedirs(os.path.dirname(args.output) or '.', exist_ok=True)
 fig.tight_layout()
 fig.savefig(args.output, dpi=300)
-print(f"[DONE] Pull histogram saved to: {args.output}")
+print(f'[DONE] Pull histogram saved to: {args.output}')
 
-# ─── Print summary ────────────────────────────────────────────────────────────
+# --- Print summary ---
 W = 48
 print()
-print("─" * W)
+print('─' * W)
 print(f"  {'Pull distribution summary':^{W-4}}")
-print("─" * W)
-print(f"  N bins            : {n_pulls}")
-print(f"  Bin width         : {bin_width:.4f}")
-print(f"  Sample mean       : {mean:+.4f}")
-print(f"  Sample std        : {std:.4f}")
-print("─" * W)
+print('─' * W)
+print(f'  N bins            : {n_pulls}')
+print(f'  Bin width         : {bin_width:.4f}')
+print(f'  Sample mean       : {mean:+.4f}')
+print(f'  Sample std        : {std:.4f}')
+print('─' * W)

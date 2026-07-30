@@ -1,7 +1,11 @@
-# !/usr/bin/env python3
-# Plot q^2 (mu+, mu-) plot from ROOT tree.
-# Usage:
-#   python plot_q2.py input.root
+"""
+plot_q2.py
+
+Plot q^2 (mu+, mu-) from a ROOT tree.
+
+Usage:
+    python plot_q2.py input.root
+"""
 
 import argparse
 import numpy as np
@@ -10,8 +14,8 @@ import uproot
 
 def parse_args():
 
-    parser = argparse.ArgumentParser(description="Plot q2 from ROOT tree.")
-    parser.add_argument("input", help="Input ROOT file")
+    parser = argparse.ArgumentParser(description='Plot q2 from ROOT tree.')
+    parser.add_argument('input', help='Input ROOT file')
     return parser.parse_args()
 
 def invariant_mass2(px1, py1, pz1, e1, px2, py2, pz2, e2):
@@ -24,21 +28,21 @@ def invariant_mass2(px1, py1, pz1, e1, px2, py2, pz2, e2):
 
 args = parse_args()
 
-outfile = "out/q2.png"
-print(f"[INFO] Reading from {args.input} and writing to {outfile}.")
+outfile = 'out/q2.png'
+print(f'[INFO] Reading from {args.input} and writing to {outfile}.')
 
 # Branches of interest
 IS_MC = False # True = MC | False = real data
 # MC
-if IS_MC: branches = ["mc_pid", "mc_px", "mc_py", "mc_pz", "mc_e"]
-else: branches = ["prt_pid", "prt_px", "prt_py", "prt_pz", "prt_e"]
+if IS_MC: branches = ['mc_pid', 'mc_px', 'mc_py', 'mc_pz', 'mc_e']
+else: branches = ['prt_pid', 'prt_px', 'prt_py', 'prt_pz', 'prt_e']
 
 # Read tree with uproot.
 with uproot.open(args.input) as f:
-    tree = f["tree"]
+    tree = f['tree']
     branches = tree.arrays(
         branches,
-        library="np"
+        library='np'
     )
 
 # Define variables for m^2(gamma, mu+) and m^2(mu+, mu-).
@@ -47,17 +51,17 @@ with uproot.open(args.input) as f:
 # the invariant masses.
 # Reco contains only reconstructed particles, i.e., muons and photons, no eta.
 if IS_MC:
-    pids = branches["mc_pid"]
-    pxs = branches["mc_px"]
-    pys = branches["mc_py"]
-    pzs = branches["mc_pz"]
-    es = branches["mc_e"]
+    pids = branches['mc_pid']
+    pxs = branches['mc_px']
+    pys = branches['mc_py']
+    pzs = branches['mc_pz']
+    es = branches['mc_e']
 else:
-    pids = branches["prt_pid"]
-    pxs = branches["prt_px"]
-    pys = branches["prt_py"]
-    pzs = branches["prt_pz"]
-    es = branches["prt_e"]
+    pids = branches['prt_pid']
+    pxs = branches['prt_px']
+    pys = branches['prt_py']
+    pzs = branches['prt_pz']
+    es = branches['prt_e']
 
 q2s = []
 
@@ -84,7 +88,7 @@ for i in range(len(pids)):
 
 q2s = np.array(q2s)
 
-print(f"[INFO] q2 range: [{q2s.min():.4f}, {q2s.max():.4f}]")
+print(f'[INFO] q2 range: [{q2s.min():.4f}, {q2s.max():.4f}]')
 
 # Plot 1d histogram of q^2
 fig, ax = plt.subplots(figsize=(7, 6))
@@ -94,19 +98,19 @@ bin_edges = np.linspace(0.04, 0.92, 201)
 counts = np.histogram(q2s, bins=bin_edges)[0]
 # Save to JSON file
 import json
-json_outfile = "out/q2_histogram.json"  
-with open(json_outfile, "w") as f:
+json_outfile = 'out/q2_histogram.json'  
+with open(json_outfile, 'w') as f:
     json.dump({
-        "bin_edges": bin_edges.tolist(),
-        "counts": counts.tolist()
+        'bin_edges': bin_edges.tolist(),
+        'counts': counts.tolist()
     }, f, indent=4)
-print(f"[DONE] q2 histogram data saved to {json_outfile}")
+print(f'[DONE] q2 histogram data saved to {json_outfile}')
 
-ax.set_xlabel(r"$q^2 (m^2_{\mu^+,\mu^-})$ [GeV$^2$]")
-ax.set_ylabel("Counts")
-ax.set_title(r"$\eta \to \mu^+\mu^-\gamma$ plot ($q^2$)")
+ax.set_xlabel(r'$q^2 (m^2_{\mu^+,\mu^-})$ [GeV$^2$]')
+ax.set_ylabel('Counts')
+ax.set_title(r'$\eta \to \mu^+\mu^-\gamma$ plot ($q^2$)')
 ax.grid(alpha=0.2)
 
 fig.tight_layout()
 fig.savefig(outfile, dpi=150)
-print(f"[DONE] q2 histogram saved to {outfile}")
+print(f'[DONE] q2 histogram saved to {outfile}')

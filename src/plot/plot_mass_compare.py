@@ -1,50 +1,62 @@
-################################################################################
-# Script to compare "all candidates" vs "best candidate per event" mass plots  #
-# on one overlaid plot.                                                        #
-# Usage: python plot_mass_compare.py input.root [output.png]                   #
-# Author: Michael Peters                                                       #
-################################################################################
+"""
+Script to compare "all candidates" vs "best candidate per event" mass plots on
+one overlaid plot. In this script the "best candidate" is defined as the 
+candidate with the lowest tag_dtf_chi2 value per event, but this could be
+changed since the best candidate method is more generic than this.
+
+Usage:
+    python plot_mass_compare.py input.root [output.png] [--full-range]
+"""
 
 import argparse
-from anaroot.src.utils import fit_utils
-import uproot
-import numpy as np
+import sys
+import os
+import awkward as ak
 import matplotlib.pyplot as plt
+# Add the "plot" and "fit" directories to the Python path so we can import the
+# project modules.
+_here = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(_here, '..', 'utils'))
+sys.path.insert(0, os.path.join(_here, '..', 'plot'))
+import cut_utils
+import plot_utils
+
 
 # IO
 parser = argparse.ArgumentParser(description='Compare all-candidate vs best-candidate mass distributions')
-parser.add_argument("input",
-                    help="Input ROOT file")
-parser.add_argument("output", nargs="?", default="mass_plot_compare.png",
-                    help="Output PNG file (default: mass_plot_compare.png)")
-parser.add_argument("--full-range", action="store_true", default=False,
-                    help="Plot full mass range (400-1200 MeV) instead of zoomed-in range (450-600 MeV) (default: False)")
+parser.add_argument('input',
+                    help='Input ROOT file')
+parser.add_argument('output', nargs='?', default='mass_plot_compare.png',
+                    help='Output PNG file (default: mass_plot_compare.png)')
+parser.add_argument('--full-range', action='store_true', default=False,
+                    help='Plot full mass range (400-1200 MeV) instead of zoomed-in range (450-600 MeV) (default: False)')
 args = parser.parse_args()
-print(f"Reading from {args.input} and writing to {args.output}.")
+print(f'Reading from {args.input} and writing to {args.output}.')
 
-# Get mass info as numpy arrays
-with uproot.open(args.input) as f:
-    tree = f["tree"]
-    arr = tree["tag_dtf_m"].array(library="np")
-    metric_arr = tree["tag_dtf_chi2"].array(library="np")
+# Get mass info as awkward arrays
+tree = cut_utils.read_branches(args.input, ['tag_dtf_m', 'tag_dtf_chi2'])
 
 # All candidates, flattened
-tag_m_all = np.concatenate(arr)
+tag_m_all = ak.to_numpy(ak.flatten(tree['tag_dtf_m']))
 
-# Best candidate per event (lowest tag_dtf_chi2). find_best_candidate returns
-# (None, None) for events with 0 candidates, so those are dropped.
-best = [fit_utils.find_best_candidate(candidates, metrics=metrics, min=True)[0]
-        for candidates, metrics in zip(arr, metric_arr)]
-tag_m_best = np.array([x for x in best if x is not None])
+# Best candidate per event (lowest tag_dtf_chi2). Events with no candidates are
+# dropped first: argmin on an empty list yields None, which would become a
+# masked entry in the histogram.
+has_candidate = ak.num(tree['tag_dtf_m']) > 0
+mass, metric = tree['tag_dtf_m'][has_candidate], tree['tag_dtf_chi2'][has_candidate]
+# drop_none strips the option type argmin introduces; without it ak.to_numpy
+# returns a MaskedArray, which np.histogram would silently miscount.
+best = cut_utils.find_best_candidates(metric, method='min')
+tag_m_best = ak.to_numpy(ak.drop_none(ak.flatten(mass[best])))
 
 print(f"{'─' * 48}")
-print(f"Candidates plotted (all):  {len(tag_m_all)}")
-print(f"Candidates plotted (best): {len(tag_m_best)}")
-print(f"Difference (candidates dropped by best selection): {len(tag_m_all) - len(tag_m_best)}")
+print(f'Candidates plotted (all):  {len(tag_m_all)}')
+print(f'Candidates plotted (best): {len(tag_m_best)}')
+print(f'Difference (candidates dropped by best selection): {len(tag_m_all) - len(tag_m_best)}')
 print(f"{'─' * 48}")
 
 # Plot
-print("Plotting histogram...")
+print('Plotting histogram...')
 plt.rcParams['font.family'] = 'STIXGeneral'
 plt.rcParams['font.size'] = 16
 plt.figure(figsize=(12, 9))
@@ -79,5 +91,5 @@ plt.ylabel('Candidates')
 plt.title('Mass Distribution: All vs Best Candidate')
 plt.grid(alpha=0.3)
 plt.legend(frameon=False)
-plt.savefig(f"{args.output}", dpi=300)
-print(f"Saved plot to {args.output}")
+plt.savefig(f'{args.output}', dpi=300)
+print(f'Saved plot to {args.output}')

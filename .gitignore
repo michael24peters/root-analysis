@@ -35,3 +35,7 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+
+# Linter files
+.ruff_cache/
+ruff.toml
