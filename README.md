@@ -31,29 +31,3 @@ uv pip install -r requirements.txt
 
 PyROOT itself isn't pip-installable -- it comes from the LCG/`lb-conda` stack,
 needed only for `concat_roots.py`.
-
-## Tests
-
-```
-pytest tests/
-```
-
-## Linting
-
-Rule set/config lives in `ruff.toml` -- only quote-style is enabled by
-default (single quotes for strings, double for docstrings); other rules are
-listed there commented-out with what each one does. Uncomment a rule code to
-turn it on.
-
-```
-uvx ruff check src/          # scan only, no changes
-uvx ruff check src/ --fix    # apply auto-fixes for whatever's enabled
-```
-
-(No `ruff` install needed -- `uvx` fetches and caches it on first use. If you
-don't have `uv`, `python3 -m ruff check src/` works too, as long as `ruff` is
-installed in your active environment.)
-
-This runs the *linter* (`ruff check`), not the full-file `ruff format`
-formatter -- see the note at the top of `ruff.toml` before turning that on,
-it reformats far more than quotes.
