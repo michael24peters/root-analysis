@@ -6,7 +6,7 @@ selection. Writes individual counts and efficiency to the terminal (or a
 json file, optionally).
 
 Usage:
-    python trig_eff.py input.root [--outfile out/output.json]
+    python trig_eff.py input.root [out/output.json]
 """
 
 import argparse
@@ -18,114 +18,134 @@ from pathlib import Path
 # IO
 parser = argparse.ArgumentParser(description='Calculate trigger efficiency from ROOT file')
 parser.add_argument('input', help='Input ROOT file')
-parser.add_argument('--outfile', default=None,
+parser.add_argument('output', default=None,
                     help='Output JSON file (optional)')
 args = parser.parse_args()
 
 # Establish output path for json file if specified. Should always write to out/
 # directory, and the output argument is the filename to save in out/
-if args.outfile:
-    output_path = Path(args.outfile)
-    print(f'Reading from {args.input}, writing to {output_path}.')
-else: print(f'Reading from {args.input}.')
+if args.output:
+    output_path = Path(args.output)
+    print(f'[INFO] Reading from {args.input}, writing to {output_path}.')
+else: print(f'[INFO] Reading from {args.input}.')
 
-# Get trigger info as numpy array. Triggers:
-# - L0: tag_l0_tos0, tag_l0_tos1
-# - HLT1: tag_hlt1_tos0, tag_hlt1_tos1
-# - HLT2: tag_hlt2_tos0, tag_hlt2_tos1, tag_hlt_tos2, tag_hlt_tis
+# Get trigger info as numpy array
 with uproot.open(args.input) as f:
     tree = f['tree']
     # Load as awkward arrays (branches are jagged: variable candidates per event),
     # then reduce to one boolean per event with ak.any(..., axis=1)
+    # L0
+    l0_tos0 = ak.any(tree['tag_l0_tos0'].array(library='ak'), axis=1)
+    l0_tos1 = ak.any(tree['tag_l0_tos1'].array(library='ak'), axis=1)
+    l0_tis0 = ak.any(tree['tag_l0_tis0'].array(library='ak'), axis=1)
+    l0_tis1 = ak.any(tree['tag_l0_tis1'].array(library='ak'), axis=1)
+    print(f'[INFO] Loaded {len(l0_tos0)} events for L0.')
+    # Hlt1
+    hlt1_tos0 = ak.any(tree['tag_hlt1_tos0'].array(library='ak'), axis=1)
+    hlt1_tos1 = ak.any(tree['tag_hlt1_tos1'].array(library='ak'), axis=1)
+    hlt1_tis0 = ak.any(tree['tag_hlt1_tis0'].array(library='ak'), axis=1)
+    hlt1_tis1 = ak.any(tree['tag_hlt1_tis1'].array(library='ak'), axis=1)
+    print(f'[INFO] Loaded {len(hlt1_tos0)} events for Hlt1.')
+    # Hlt2
     hlt2_tos0 = ak.any(tree['tag_hlt2_tos0'].array(library='ak'), axis=1)
     hlt2_tos1 = ak.any(tree['tag_hlt2_tos1'].array(library='ak'), axis=1)
     hlt2_tos2 = ak.any(tree['tag_hlt2_tos2'].array(library='ak'), axis=1)
     hlt2_tis0 = ak.any(tree['tag_hlt2_tis0'].array(library='ak'), axis=1)
     hlt2_tis1 = ak.any(tree['tag_hlt2_tis1'].array(library='ak'), axis=1)
-    hlt2_tis2 = ak.any(tree['tag_hlt2_tis2'].array(library='ak'), axis=1)
-    hlt2_tos2 = ak.any(tree['tag_hlt2_tos2'].array(library='ak'), axis=1)
-    hlt2_tis_topo = ak.any(tree['tag_hlt2_tis_topo'].array(library='ak'), axis=1)
-    hlt2_tos_topo = ak.any(tree['tag_hlt2_tos_topo'].array(library='ak'), axis=1)
+    print(f'[INFO] Loaded {len(hlt2_tos0)} events for Hlt2.')
 
-print(f"{'─' * 48}")
-print(f'Trigger Counts:')
-print(f"{'─' * 48}")
-# Print number of TIS and TOS events for each trigger. Use ak.sum to count
-# True values, then put out of total number of events (len(hlt2_tos0)).
-print(f'TOS0: {np.sum(hlt2_tos0)} / {len(hlt2_tos0)} events')
-print(f'TIS0: {np.sum(hlt2_tis0)} / {len(hlt2_tis0)} events')
-print(f'TOS1: {np.sum(hlt2_tos1)} / {len(hlt2_tos1)} events')
-print(f'TIS1: {np.sum(hlt2_tis1)} / {len(hlt2_tis1)} events')
-print(f'TOS2: {np.sum(hlt2_tos2)} / {len(hlt2_tos2)} events')
-print(f'TIS2: {np.sum(hlt2_tis2)} / {len(hlt2_tis2)} events')
-print(f'TOS Topo: {np.sum(hlt2_tos_topo)} / {len(hlt2_tos_topo)} events')
-print(f'TIS Topo: {np.sum(hlt2_tis_topo)} / {len(hlt2_tis_topo)} events')
+def calc_efficiency(tos, tis):
+    """Calculate trigger efficiency using the formula:
+    eff = N(eta2mumu | reconstructed and TIS and TOS) / N(eta2mumu | reconstructed and TIS)
+    where N is the number of events satisfying the conditions.
+    """
+    n_tis = np.sum(tis)
+    n_tos_given_tis = np.sum(tos & tis)
+    eff = n_tos_given_tis / n_tis if n_tis > 0 else 0
+    return eff, n_tos_given_tis, n_tis
 
-# Trigger efficiency is defined as number of TOS given TIS divided by total
-# number of TIS events, i.e., eff = N(TOS & TIS) / N(TIS). Calculate for each
-# trigger.
-effs = {}
-print(f"{'─' * 48}")
-print(f'Trigger Efficiencies:')
-print(f"{'─' * 48}")
+def print_counts(tos, tis, trigger_name):
+    """Print the number of TIS and TOS events for a given trigger."""
+    print(f"{'─' * 60}")
+    print(f'Trigger Counts for {trigger_name}:')
+    print(f'TOS: {np.sum(tos)} / {len(tos)} events')
+    print(f'TIS: {np.sum(tis)} / {len(tis)} events')
 
-n_tis0 = np.sum(hlt2_tis0)
-n_tis1 = np.sum(hlt2_tis1)
-n_tis2 = np.sum(hlt2_tis2)
-n_tis_topo = np.sum(hlt2_tis_topo)
-print(f'TIS events: {n_tis0} (TIS0), {n_tis1} (TIS1), {n_tis2} (TIS2), {n_tis_topo} (TIS Topo)')
-n_tos_given_tis_0 = np.sum(hlt2_tos0 & hlt2_tis0)
-eff0 = n_tos_given_tis_0 / n_tis0 if n_tis0 > 0 else 0
-print(f'TOS0 & TIS: {n_tos_given_tis_0} (efficiency: {eff0:.4f})')
-n_tos_given_tis_1 = np.sum(hlt2_tos1 & hlt2_tis1)
-eff1 = n_tos_given_tis_1 / n_tis1 if n_tis1 > 0 else 0
-print(f'TOS1 & TIS: {n_tos_given_tis_1} (efficiency: {eff1:.4f})') 
-n_tos_given_tis_2 = np.sum(hlt2_tos2 & hlt2_tis2)
-eff2 = n_tos_given_tis_2 / n_tis2 if n_tis2 > 0 else 0
-print(f'TOS2 & TIS: {n_tos_given_tis_2} (efficiency: {eff2:.4f})')
-n_tos_given_tis_topo = np.sum(hlt2_tos_topo & hlt2_tis_topo)
-eff3 = n_tos_given_tis_topo / n_tis_topo if n_tis_topo > 0 else 0
-print(f'TOS Topo & TIS: {n_tos_given_tis_topo} (efficiency: {eff3:.4f})')
+def print_efficiency(eff, n_tos_given_tis, n_tis, trigger_name):
+    """Print the trigger efficiency for a given trigger."""
+    print(f"{'─' * 60}")
+    print(f'Trigger Efficiency for {trigger_name}:')
+    print(f'TIS events: {n_tis}')
+    print(f'TOS & TIS events: {n_tos_given_tis}')
+    print(f'Efficiency: {eff:.4f}')
 
-# Then calculate the overall efficiency of the trigger, which is
-# eff = N((L0 & HLT1 & HLT2) TOS & TIS) / N((L0 & HLT1 & HLT2) TIS).
-overall_tos = (hlt2_tos0 | hlt2_tos1 | hlt2_tos2 | hlt2_tos_topo)
-overall_tis = (hlt2_tis0 | hlt2_tis1 | hlt2_tis2 | hlt2_tis_topo)
-n_tis = np.sum(overall_tis)
-n_tos_given_tis = np.sum(overall_tos & overall_tis)
-overall_eff = n_tos_given_tis / n_tis if n_tis > 0 else 0
-print(f"{'─' * 48}")
-print(f'Overall HLT2 Trigger Efficiency: {overall_eff:.4f} ({n_tos_given_tis} / {n_tis})')
+# L0 calculations
+eff0_l0, n_tos_given_tis_0_l0, n_tis0_l0 = calc_efficiency(l0_tos0, l0_tis0)
+eff1_l0, n_tos_given_tis_1_l0, n_tis1_l0 = calc_efficiency(l0_tos1, l0_tis1)
+total_eff_l0, n_tos_given_tis_total_l0, n_tis_total_l0 = calc_efficiency(l0_tos0 | l0_tos1, l0_tis0 | l0_tis1)
+print_counts(l0_tos0, l0_tis0, 'L0DiMuonDecision')  # tos0
+print_counts(l0_tos1, l0_tis1, 'L0MuonDecision')  # tos1
+print_efficiency(eff0_l0, n_tos_given_tis_0_l0, n_tis0_l0, 'L0DiMuonDecision')  # tos0
+print_efficiency(eff1_l0, n_tos_given_tis_1_l0, n_tis1_l0, 'L0MuonDecision')  # tos1
+print_efficiency(total_eff_l0, n_tos_given_tis_total_l0, n_tis_total_l0, 'L0')  # total
 
-# Repeat except without including TIS2/TOS2 (i.e., displaced trigger), since
-# this one seems to have problems
-overall_tos_no_2 = (hlt2_tos0 | hlt2_tos1 | hlt2_tos_topo)
-overall_tis_no_2 = (hlt2_tis0 | hlt2_tis1 | hlt2_tis_topo)
-n_tis_no_2 = np.sum(overall_tis_no_2)
-overall_eff_no_2 = np.sum(overall_tos_no_2 & overall_tis_no_2)
-print(f'Overall HLT2 Trigger Efficiency: {overall_eff_no_2 / n_tis_no_2 if n_tis_no_2 > 0 else 0:.4f} ({overall_eff_no_2} / {n_tis_no_2})')
-print(f'  (no TIS2/TOS2)')
-print(f"{'─' * 48}")
+# Hlt1 calculations
+eff0_hlt1, n_tos_given_tis_0_hlt1, n_tis0_hlt1 = calc_efficiency(hlt1_tos0, hlt1_tis0)
+eff1_hlt1, n_tos_given_tis_1_hlt1, n_tis1_hlt1 = calc_efficiency(hlt1_tos1, hlt1_tis1)
+total_eff_hlt1, n_tos_given_tis_total_hlt1, n_tis_total_hlt1 = calc_efficiency(hlt1_tos0 | hlt1_tos1,
+                                                                               hlt1_tis0 | hlt1_tis1)
+print_counts(hlt1_tos0, hlt1_tis0, 'Hlt1DiMuonNoIPDecision')  # tos0
+print_counts(hlt1_tos1, hlt1_tis1, 'Hlt1DiMuonLowMassDecision')  # tos1
+print_efficiency(eff0_hlt1, n_tos_given_tis_0_hlt1, n_tis0_hlt1, 'Hlt1DiMuonNoIPDecision')  # tos0
+print_efficiency(eff1_hlt1, n_tos_given_tis_1_hlt1, n_tis1_hlt1, 'Hlt1DiMuonLowMassDecision')  # tos1
+print_efficiency(total_eff_hlt1, n_tos_given_tis_total_hlt1, n_tis_total_hlt1, 'Hlt1')  # total
+
+# Hlt2 calculations
+eff0, n_tos_given_tis_0, n_tis0 = calc_efficiency(hlt2_tos0, hlt2_tis0)
+eff1, n_tos_given_tis_1, n_tis1 = calc_efficiency(hlt2_tos1, hlt2_tis1)
+total_eff_hlt2, n_tos_given_tis_total_hlt2, n_tis_total_hlt2 = calc_efficiency(hlt2_tos0 | hlt2_tos1, 
+                                                                hlt2_tis0 | hlt2_tis1)
+print_counts(hlt2_tos0, hlt2_tis0, 'Hlt2ExoticaPrmptDiMuonTurbo')  # tos0
+print_counts(hlt2_tos1, hlt2_tis1, 'Hlt2ExoticaDiMuonNoIPTurbo')  # tos1
+print_counts(hlt2_tos0 | hlt2_tos1, hlt2_tis0 | hlt2_tis1, 'Hlt2')  # total
+print_efficiency(eff0, n_tos_given_tis_0, n_tis0, 'Hlt2ExoticaPrmptDiMuonTurbo')  # tos0
+print_efficiency(eff1, n_tos_given_tis_1, n_tis1, 'Hlt2ExoticaDiMuonNoIPTurbo')  # tos1
+print_efficiency(total_eff_hlt2, n_tos_given_tis_total_hlt2, n_tis_total_hlt2, 'Hlt2')  # total
+
+# ------------------------------------------------------------------------------
 
 # Write results to JSON if requested
-if args.outfile:
+if args.output:
     import json
     output_path.parent.mkdir(parents=True, exist_ok=True)
     results = {
-        'TOS0': int(np.sum(hlt2_tos0)),
-        'TIS0': int(np.sum(hlt2_tis0)),
-        'TOS1': int(np.sum(hlt2_tos1)),
-        'TIS1': int(np.sum(hlt2_tis1)),
-        'TOS2': int(np.sum(hlt2_tos2)),
-        'TIS2': int(np.sum(hlt2_tis2)),
-        'TOS Topo': int(np.sum(hlt2_tos_topo)),
-        'TIS Topo': int(np.sum(hlt2_tis_topo)),
-        'efficiency_TOS0_given_TIS0': float(eff0),
-        'efficiency_TOS1_given_TIS1': float(eff1),
-        'efficiency_TOS2_given_TIS2': float(eff2),
-        'efficiency_TOS_Topo_given_TIS_Topo': float(eff3),
-        'overall_efficiency': float(overall_eff),
-        'overall_efficiency_no_2': float(overall_eff_no_2 / n_tis_no_2 if n_tis_no_2 > 0 else 0),
+        'L0': {
+            'TOS0': int(np.sum(l0_tos0)),
+            'TIS0': int(np.sum(l0_tis0)),
+            'TOS1': int(np.sum(l0_tos1)),
+            'TIS1': int(np.sum(l0_tis1)),
+            'efficiency_TOS0_given_TIS0': float(eff0_l0),
+            'efficiency_TOS1_given_TIS1': float(eff1_l0),
+            'overall_efficiency': float(total_eff_l0),
+        },
+        'HLT1': {
+            'TOS0': int(np.sum(hlt1_tos0)),
+            'TIS0': int(np.sum(hlt1_tis0)),
+            'TOS1': int(np.sum(hlt1_tos1)),
+            'TIS1': int(np.sum(hlt1_tis1)),
+            'efficiency_TOS0_given_TIS0': float(eff0_hlt1),
+            'efficiency_TOS1_given_TIS1': float(eff1_hlt1),
+            'overall_efficiency': float(total_eff_hlt1),
+        },
+        'HLT2': {
+            'TOS0': int(np.sum(hlt2_tos0)),
+            'TIS0': int(np.sum(hlt2_tis0)),
+            'TOS1': int(np.sum(hlt2_tos1)),
+            'TIS1': int(np.sum(hlt2_tis1)),
+            'efficiency_TOS0_given_TIS0': float(eff0),
+            'efficiency_TOS1_given_TIS1': float(eff1),
+            'overall_efficiency': float(total_eff_hlt2),
+        }
     }
     with open(output_path, 'w') as f:
         json.dump(results, f, indent=4)
