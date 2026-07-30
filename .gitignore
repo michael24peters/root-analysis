@@ -11,11 +11,11 @@
 *.root
 
 # root files directory
-ntuple/*
+ntuple/
 
 # outputs/ directory
-outputs/*
-out/*
+outputs/
+out/
 
 # old/ directory
 old/*
